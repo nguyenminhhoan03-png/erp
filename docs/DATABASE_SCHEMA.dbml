@@ -1,0 +1,413 @@
+// ====================================================================
+// ERP ENTERPRISE DATABASE SCHEMA (DBML)
+// Công cụ trực quan: https://dbdiagram.io/d
+// Thiết kế chuẩn Senior Database Engineer (PostgreSQL / MySQL / Laravel)
+// Hỗ trợ: Kanban, Checklist, Jira Resolution, Phê duyệt, Báo cáo ngày,
+//         Fine-grained RBAC + ABAC Scope, Dynamic Custom Roles.
+// ====================================================================
+
+Project ERP_Enterprise_Core {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # HỆ THỐNG CƠ SỞ DỮ LIỆU ERP DOANH NGHIỆP
+    Đặc tả hoàn chỉnh quan hệ thực thể (ERD) cho:
+    1. Quản lý Tổ chức & Nhân sự (Departments & Users)
+    2. Ma trận Phân quyền Động (Dynamic Roles, RBAC, ABAC Data Scope, User Overrides)
+    3. Phân hệ Quản lý Công việc (Tasks, Kanban, Multi-Assignees, Checklist, Jira Resolution, Phê duyệt)
+    4. Phân hệ Báo cáo Công việc Hằng ngày (Daily Reports & Items)
+    5. Nhật ký Kiểm toán Hoạt động (Task Activity / Audit Trail)
+  '''
+}
+
+// ====================================================================
+// 1. ENUMERATIONS (Định danh chuẩn cho ràng buộc dữ liệu)
+// ====================================================================
+
+Enum data_scope_enum {
+  GLOBAL      [note: 'Toàn quyền toàn công ty (Ban giám đốc, Admin)']
+  DEPARTMENT  [note: 'Phạm vi dữ liệu cấp phòng ban (Trưởng phòng, Lead)']
+  OWN         [note: 'Chỉ dữ liệu do chính mình tạo hoặc được giao (Nhân viên)']
+}
+
+Enum task_status_enum {
+  PENDING_APPROVAL  [note: 'Đề xuất chờ Trưởng phòng phê duyệt']
+  TODO              [note: 'Chờ thực hiện']
+  IN_PROGRESS       [note: 'Đang triển khai']
+  IN_REVIEW         [note: 'Đang kiểm thử, đánh giá chất lượng']
+  DONE              [note: 'Hoàn thành']
+  CANCELLED         [note: 'Đã hủy bỏ hoặc đóng không làm']
+}
+
+Enum task_priority_enum {
+  LOW     [note: 'Thấp - Có thể làm sau']
+  MEDIUM  [note: 'Bình thường']
+  HIGH    [note: 'Ưu tiên cao']
+  URGENT  [note: 'Khẩn cấp - Cần xử lý ngay']
+}
+
+Enum task_resolution_enum {
+  DONE              [note: 'Đã xử lý xong hoàn tất (Resolved)']
+  NOT_A_BUG         [note: 'Không phải lỗi hệ thống (Not a Bug)']
+  WONT_FIX          [note: 'Không cần sửa / Hủy do thay đổi yêu cầu (Won\'t Fix)']
+  CANNOT_REPRODUCE  [note: 'Không tái hiện được lỗi (Cannot Reproduce)']
+  DUPLICATE         [note: 'Trùng lặp với công việc khác (Duplicate)']
+}
+
+Enum daily_report_status_enum {
+  DRAFT      [note: 'Bản nháp cá nhân, chỉ người tạo xem được']
+  SUBMITTED  [note: 'Đã nộp chính thức cho Quản lý nghiệm thu']
+}
+
+Enum report_item_status_enum {
+  IN_PROGRESS  [note: 'Đang thực hiện']
+  COMPLETED    [note: 'Đã hoàn thành']
+}
+
+Enum user_status_enum {
+  ACTIVE     [note: 'Đang hoạt động']
+  INACTIVE   [note: 'Đã nghỉ việc / Khóa tài khoản']
+  SUSPENDED  [note: 'Tạm đình chỉ']
+}
+
+// ====================================================================
+// 2. PHÂN HỆ TỔ CHỨC & NHÂN SỰ (ORGANIZATION & USERS)
+// ====================================================================
+
+Table departments {
+  id varchar(50) [pk, note: 'Mã phòng: it, marketing, hr, sales, accounting...']
+  name varchar(150) [not null, note: 'Tên phòng ban']
+  code varchar(20) [not null, unique, note: 'Mã viết tắt: IT, MKT, HR, SALES, ACC']
+  color varchar(20) [default: '#3b82f6', note: 'Mã màu nhận diện thương hiệu']
+  description text [note: 'Mô tả chức năng nhiệm vụ của phòng ban']
+  manager_id varchar(50) [note: 'Trưởng phòng phụ trách']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+  deleted_at timestamp [note: 'Soft delete']
+
+  indexes {
+    code
+    manager_id
+  }
+}
+
+Table users {
+  id varchar(50) [pk, note: 'Định danh nhân viên (UUID hoặc user-id)']
+  name varchar(100) [not null, note: 'Họ và tên nhân viên']
+  email varchar(150) [not null, unique, note: 'Email công ty đăng nhập']
+  phone varchar(25) [note: 'Số điện thoại liên lạc']
+  role_id varchar(50) [not null, note: 'FK -> roles.id (ADMIN, MANAGER, LEAD, EMPLOYEE hoặc Custom Role)']
+  department_id varchar(50) [not null, note: 'FK -> departments.id']
+  title varchar(100) [note: 'Chức danh công việc (VD: Senior Frontend Engineer, QA Lead)']
+  avatar varchar(255) [note: 'URL ảnh đại diện']
+  status user_status_enum [not null, default: 'ACTIVE', note: 'Trạng thái tài khoản']
+  password_hash varchar(255) [note: 'Mật khẩu mã hóa Bcrypt / Argon2']
+  remember_token varchar(100)
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+  deleted_at timestamp [note: 'Soft delete']
+
+  indexes {
+    email
+    department_id
+    role_id
+    status
+  }
+}
+
+// ====================================================================
+// 3. PHÂN HỆ PHÂN QUYỀN ĐỘNG (DYNAMIC RBAC & ABAC SCOPE)
+// ====================================================================
+
+Table roles {
+  id varchar(50) [pk, note: 'ID định danh (ADMIN, MANAGER, LEAD, EMPLOYEE, CHAIRMAN, AUDITOR, ...)']
+  name varchar(100) [not null, note: 'Tên vai trò hiển thị (VD: Chủ tịch HĐQT, Tech Lead, Trưởng phòng)']
+  code varchar(50) [not null, unique, note: 'Mã vai trò in hoa']
+  description text [note: 'Mô tả thẩm quyền và phạm vi trách nhiệm']
+  color varchar(30) [default: 'blue', note: 'Màu đại diện: rose, blue, purple, amber, emerald, indigo']
+  data_scope data_scope_enum [not null, default: 'OWN', note: 'Phạm vi dữ liệu: GLOBAL | DEPARTMENT | OWN']
+  is_system boolean [not null, default: false, note: 'Vai trò cốt lõi của hệ thống (không cho phép xóa)']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    code
+    is_system
+  }
+}
+
+Table permissions {
+  key varchar(100) [pk, note: 'Mã quyền: tasks:create, tasks:approve, reports:view_department, ...']
+  name varchar(150) [not null, note: 'Tên quyền diễn giải']
+  module varchar(50) [not null, note: 'Phân hệ: TASKS | REPORTS | HRM | SETTINGS']
+  description text [note: 'Chi tiết hành động được phép']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    module
+  }
+}
+
+Table role_permissions {
+  id bigint [pk, increment]
+  role_id varchar(50) [not null, note: 'FK -> roles.id']
+  permission_key varchar(100) [not null, note: 'FK -> permissions.key']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (role_id, permission_key) [unique]
+  }
+}
+
+Table user_permission_overrides {
+  id bigint [pk, increment]
+  user_id varchar(50) [not null, note: 'FK -> users.id']
+  permission_key varchar(100) [not null, note: 'FK -> permissions.key']
+  granted_by varchar(50) [note: 'Người cấp quyền ngoại lệ (Admin/Manager)']
+  reason text [note: 'Lý do cấp đặc quyền cá nhân']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (user_id, permission_key) [unique]
+  }
+}
+
+// ====================================================================
+// 4. PHÂN HỆ QUẢN LÝ CÔNG VIỆC (TASKS & KANBAN MANAGEMENT)
+// ====================================================================
+
+Table tasks {
+  id varchar(50) [pk, note: 'UUID hoặc task-id']
+  code varchar(50) [not null, unique, note: 'Mã công việc Jira (VD: ERP-101, ERP-102)']
+  title varchar(255) [not null, note: 'Tiêu đề công việc']
+  description text [note: 'Mô tả chi tiết yêu cầu, tiêu chuẩn kỹ thuật']
+  status task_status_enum [not null, default: 'TODO', note: 'Trạng thái cột Kanban']
+  priority task_priority_enum [not null, default: 'MEDIUM', note: 'Mức độ ưu tiên']
+  
+  // Chuẩn Jira Resolution khi đóng/kết thúc task
+  resolution task_resolution_enum [note: 'Kết quả xử lý: DONE, NOT_A_BUG, WONT_FIX, CANNOT_REPRODUCE, DUPLICATE']
+  resolution_note text [note: 'Ghi chú lý do đóng (VD: Đã tích hợp API xong, Không tái hiện được)']
+  closed_at timestamp [note: 'Thời điểm đóng task']
+  closed_by_id varchar(50) [note: 'Người quyết định đóng task']
+
+  // Phạm vi phòng ban & Người tạo
+  department_id varchar(50) [not null, note: 'FK -> departments.id']
+  creator_id varchar(50) [not null, note: 'FK -> users.id (Người tạo)']
+
+  // Thời hạn
+  start_date date [note: 'Ngày bắt đầu dự kiến']
+  due_date date [note: 'Hạn chót hoàn thành (Deadline)']
+
+  // Quy trình phê duyệt (Approval Workflow)
+  requires_approval boolean [not null, default: false, note: 'Task này có cần Trưởng phòng duyệt trước khi làm?']
+  is_approved boolean [not null, default: true, note: 'Đã được duyệt hay chưa']
+  approved_by_id varchar(50) [note: 'FK -> users.id (Trưởng phòng duyệt)']
+
+  // Thứ tự sắp xếp trên cột Kanban
+  order_index integer [not null, default: 0, note: 'Vị trí sắp xếp khi kéo thả Kanban']
+
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+  deleted_at timestamp [note: 'Soft delete']
+
+  indexes {
+    code
+    department_id
+    status
+    priority
+    creator_id
+    due_date
+    resolution
+  }
+}
+
+Table task_assignees {
+  id bigint [pk, increment]
+  task_id varchar(50) [not null, note: 'FK -> tasks.id']
+  user_id varchar(50) [not null, note: 'FK -> users.id (Nhân viên được giao)']
+  assigned_at timestamp [default: `now()`]
+
+  indexes {
+    (task_id, user_id) [unique]
+    user_id
+  }
+}
+
+Table task_checklists {
+  id varchar(50) [pk, note: 'UUID hoặc chk-id']
+  task_id varchar(50) [not null, note: 'FK -> tasks.id']
+  title varchar(255) [not null, note: 'Nội dung hạng mục con (VD: Tiếp nhận, Thực hiện, Nghiệm thu)']
+  is_completed boolean [not null, default: false, note: 'Đã hoàn thành hay chưa']
+  order_index integer [not null, default: 0, note: 'Thứ tự hiển thị các bước']
+  completed_at timestamp [note: 'Thời điểm tích hoàn tất']
+  completed_by_id varchar(50) [note: 'Người tích hoàn thành']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    task_id
+  }
+}
+
+Table task_comments {
+  id varchar(50) [pk, note: 'UUID hoặc cmt-id']
+  task_id varchar(50) [not null, note: 'FK -> tasks.id']
+  user_id varchar(50) [not null, note: 'FK -> users.id (Người gửi bình luận)']
+  content text [not null, note: 'Nội dung trao đổi, tiến độ hoặc thắc mắc']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+  deleted_at timestamp
+
+  indexes {
+    task_id
+    user_id
+  }
+}
+
+Table tags {
+  id bigint [pk, increment]
+  name varchar(50) [not null, unique, note: 'Tên nhãn: Frontend, Backend, API, Bug, DevOps...']
+  color varchar(20) [default: '#64748b']
+  created_at timestamp [default: `now()`]
+}
+
+Table task_tags {
+  task_id varchar(50) [not null, note: 'FK -> tasks.id']
+  tag_id bigint [not null, note: 'FK -> tags.id']
+
+  indexes {
+    (task_id, tag_id) [pk]
+  }
+}
+
+Table task_activity_logs {
+  id bigint [pk, increment]
+  task_id varchar(50) [not null, note: 'FK -> tasks.id']
+  user_id varchar(50) [not null, note: 'FK -> users.id (Người thực hiện hành động)']
+  action varchar(50) [not null, note: 'STATUS_CHANGED | RESOLVED | REOPENED | APPROVED | REJECTED | ASSIGNED']
+  from_value varchar(100) [note: 'Giá trị cũ (VD: TODO)']
+  to_value varchar(100) [note: 'Giá trị mới (VD: IN_PROGRESS)']
+  note text [note: 'Ghi chú bổ sung']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    task_id
+    user_id
+    created_at
+  }
+}
+
+// ====================================================================
+// 5. PHÂN HỆ BÁO CÁO NGÀY (DAILY REPORTS)
+// ====================================================================
+
+Table daily_reports {
+  id varchar(50) [pk, note: 'UUID hoặc report-id']
+  user_id varchar(50) [not null, note: 'FK -> users.id (Người nộp báo cáo)']
+  department_id varchar(50) [not null, note: 'FK -> departments.id']
+  report_date date [not null, note: 'Ngày báo cáo (YYYY-MM-DD)']
+  status daily_report_status_enum [not null, default: 'DRAFT', note: 'DRAFT: Đang soạn | SUBMITTED: Đã nộp']
+  tomorrow_plans text [not null, note: 'Kế hoạch công việc dự kiến cho ngày tiếp theo']
+  blockers text [note: 'Khó khăn vướng mắc hoặc cần hỗ trợ từ cấp trên']
+  submitted_at timestamp [note: 'Thời điểm nộp chính thức']
+  reviewed_by_id varchar(50) [note: 'Quản lý đã bấm Xác nhận xem']
+  reviewed_at timestamp [note: 'Thời điểm quản lý xem']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (user_id, report_date) [unique, note: 'Mỗi nhân viên chỉ có 1 báo cáo duy nhất cho mỗi ngày']
+    department_id
+    report_date
+    status
+  }
+}
+
+Table daily_report_items {
+  id varchar(50) [pk, note: 'UUID hoặc item-id']
+  report_id varchar(50) [not null, note: 'FK -> daily_reports.id']
+  task_id varchar(50) [note: 'FK -> tasks.id (Tùy chọn: liên kết trực tiếp task ERP nếu có)']
+  task_title varchar(255) [not null, note: 'Tên đầu việc đã thực hiện trong ngày']
+  hours_spent decimal(4,2) [not null, default: 0, note: 'Số giờ đã làm (VD: 4.5 giờ)']
+  status report_item_status_enum [not null, default: 'IN_PROGRESS', note: 'Trạng thái đầu việc: IN_PROGRESS | COMPLETED']
+  note text [note: 'Ghi chú tiến độ chi tiết']
+  order_index integer [not null, default: 0]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    report_id
+    task_id
+  }
+}
+
+// ====================================================================
+// 6. QUAN HỆ KHÓA NGOẠI (FOREIGN KEY RELATIONSHIPS)
+// ====================================================================
+
+// Quản lý tổ chức & Nhân sự
+Ref: users.department_id > departments.id [delete: restrict]
+Ref: departments.manager_id > users.id [delete: set null]
+
+// Phân quyền
+Ref: users.role_id > roles.id [delete: restrict]
+Ref: role_permissions.role_id > roles.id [delete: cascade]
+Ref: role_permissions.permission_key > permissions.key [delete: cascade]
+Ref: user_permission_overrides.user_id > users.id [delete: cascade]
+Ref: user_permission_overrides.permission_key > permissions.key [delete: cascade]
+Ref: user_permission_overrides.granted_by > users.id [delete: set null]
+
+// Công việc (Tasks)
+Ref: tasks.department_id > departments.id [delete: restrict]
+Ref: tasks.creator_id > users.id [delete: restrict]
+Ref: tasks.closed_by_id > users.id [delete: set null]
+Ref: tasks.approved_by_id > users.id [delete: set null]
+
+// Liên kết công việc con & Phụ trách
+Ref: task_assignees.task_id > tasks.id [delete: cascade]
+Ref: task_assignees.user_id > users.id [delete: cascade]
+Ref: task_checklists.task_id > tasks.id [delete: cascade]
+Ref: task_checklists.completed_by_id > users.id [delete: set null]
+Ref: task_comments.task_id > tasks.id [delete: cascade]
+Ref: task_comments.user_id > users.id [delete: cascade]
+Ref: task_activity_logs.task_id > tasks.id [delete: cascade]
+Ref: task_activity_logs.user_id > users.id [delete: cascade]
+Ref: task_tags.task_id > tasks.id [delete: cascade]
+Ref: task_tags.tag_id > tags.id [delete: cascade]
+
+// Báo cáo ngày
+Ref: daily_reports.user_id > users.id [delete: cascade]
+Ref: daily_reports.department_id > departments.id [delete: restrict]
+Ref: daily_reports.reviewed_by_id > users.id [delete: set null]
+Ref: daily_report_items.report_id > daily_reports.id [delete: cascade]
+Ref: daily_report_items.task_id > tasks.id [delete: set null]
+
+// ====================================================================
+// 7. NHÓM BẢNG THEO CHỨC NĂNG (TABLE GROUPS TRÊN DBDATAGRAM.IO)
+// ====================================================================
+
+TableGroup Organization_And_HR {
+  departments
+  users
+}
+
+TableGroup RBAC_And_Dynamic_Permissions {
+  roles
+  permissions
+  role_permissions
+  user_permission_overrides
+}
+
+TableGroup Task_And_Kanban_Management {
+  tasks
+  task_assignees
+  task_checklists
+  task_comments
+  tags
+  task_tags
+  task_activity_logs
+}
+
+TableGroup Daily_Reports_System {
+  daily_reports
+  daily_report_items
+}
