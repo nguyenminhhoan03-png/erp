@@ -422,6 +422,9 @@ export function generateMockTasks(): Task[] {
         code: `ERP-${taskIndex}`,
         title: template.title,
         description: template.desc,
+        projectId: "ERP_CORE",
+        projectName: "Hệ thống ERP Doanh nghiệp",
+        projectKey: "ERP",
         status,
         priority: template.priority,
         departmentId: dept.id,
@@ -443,6 +446,157 @@ export function generateMockTasks(): Task[] {
       });
 
       taskIndex++;
+    });
+  });
+
+  // Task kỹ thuật đặc thù cho các Tỉnh CĐS đang ở Bước 6 (Đang triển khai)
+  const GOV_PROJECTS_MOCK = [
+    {
+      projectId: "DLTM_LCA",
+      projectKey: "LCA",
+      projectName: "CĐS Du lịch - Tỉnh Lào Cai",
+      tasks: [
+        {
+          code: "LCA-01",
+          title: "Cấu hình hạ tầng Cloud & bản đồ số GIS Sa Pa - Bắc Hà",
+          desc: "Thiết lập cụm bản đồ Mapbox/Leaflet, số hóa tọa độ 180 điểm check-in và di tích quốc gia tại Lào Cai.",
+          status: "IN_PROGRESS" as TaskStatus,
+          priority: "URGENT" as TaskPriority,
+          deptId: "it" as DepartmentId,
+          tags: ["GIS", "Cloud", "Lào Cai"],
+          dueOffset: 2,
+        },
+        {
+          code: "LCA-02",
+          title: "Thu thập và chuẩn hóa dữ liệu 150 khách sạn & homestay",
+          desc: "Làm việc với Hiệp hội Du lịch Lào Cai lấy dữ liệu giá phòng, hình ảnh 360 độ và thông tin liên hệ.",
+          status: "TODO" as TaskStatus,
+          priority: "HIGH" as TaskPriority,
+          deptId: "marketing" as DepartmentId,
+          tags: ["Data Entry", "Lào Cai"],
+          dueOffset: 5,
+        },
+        {
+          code: "LCA-03",
+          title: "Tích hợp cổng vé điện tử Fansipan Legend & Cáp treo",
+          desc: "Kết nối API đối tác SunWorld Fansipan để xuất vé QR code trực tiếp trên app du lịch Lào Cai.",
+          status: "IN_REVIEW" as TaskStatus,
+          priority: "HIGH" as TaskPriority,
+          deptId: "it" as DepartmentId,
+          tags: ["API", "Integration", "Lào Cai"],
+          dueOffset: 1,
+        },
+        {
+          code: "LCA-04",
+          title: "Khảo sát hạ tầng mạng tại Trung tâm Thông tin Xúc tiến Du lịch",
+          desc: "Đo kiểm băng thông, tư vấn cấu hình màn hình cảm ứng Kiosk tra cứu du lịch tại bến xe Lào Cai.",
+          status: "DONE" as TaskStatus,
+          priority: "MEDIUM" as TaskPriority,
+          deptId: "it" as DepartmentId,
+          tags: ["Infra", "Hardware", "Lào Cai"],
+          dueOffset: -3,
+        },
+      ],
+    },
+    {
+      projectId: "DLTM_LDO",
+      projectKey: "LDO",
+      projectName: "CĐS Du lịch - Tỉnh Lâm Đồng",
+      tasks: [
+        {
+          code: "LDO-01",
+          title: "Triển khai hệ thống bán vé tham quan điện tử Đà Lạt City Tour",
+          desc: "Tích hợp cổng VNPay/MoMo cho các điểm tham quan: Thung lũng Tình Yêu, Dinh Bảo Đại, Vườn hoa Đà Lạt.",
+          status: "IN_PROGRESS" as TaskStatus,
+          priority: "HIGH" as TaskPriority,
+          deptId: "it" as DepartmentId,
+          tags: ["Payment", "Booking", "Đà Lạt"],
+          dueOffset: 3,
+        },
+        {
+          code: "LDO-02",
+          title: "Đào tạo nghiệp vụ quản trị hệ thống cho Sở VHTTDL Lâm Đồng",
+          desc: "Tổ chức 2 buổi tập huấn trực tuyến cho 25 cán bộ Sở và phòng VHTT các huyện Lạc Dương, Đơn Dương.",
+          status: "TODO" as TaskStatus,
+          priority: "MEDIUM" as TaskPriority,
+          deptId: "hr" as DepartmentId,
+          tags: ["Training", "Lâm Đồng"],
+          dueOffset: 7,
+        },
+        {
+          code: "LDO-03",
+          title: "Cấu hình tên miền du lịch chính thức `dalat.vn` và SSL",
+          desc: "Phối hợp Trung tâm CNTT Lâm Đồng trỏ DNS và cấu hình CDN Cloudflare chống DDoS.",
+          status: "DONE" as TaskStatus,
+          priority: "HIGH" as TaskPriority,
+          deptId: "it" as DepartmentId,
+          tags: ["DevOps", "DNS", "Lâm Đồng"],
+          dueOffset: -5,
+        },
+      ],
+    },
+    {
+      projectId: "DLTM_KGI",
+      projectKey: "KGI",
+      projectName: "CĐS Du lịch - Tỉnh Kiên Giang",
+      tasks: [
+        {
+          code: "KGI-01",
+          title: "Cấu hình cổng thông tin du lịch Phú Quốc Smart Tourism",
+          desc: "Xây dựng đa ngôn ngữ (Việt - Anh - Hàn - Trung) phục vụ khách quốc tế đến đảo ngọc Phú Quốc.",
+          status: "IN_PROGRESS" as TaskStatus,
+          priority: "URGENT" as TaskPriority,
+          deptId: "it" as DepartmentId,
+          tags: ["i18n", "Phú Quốc", "Kiên Giang"],
+          dueOffset: 4,
+        },
+        {
+          code: "KGI-02",
+          title: "Kiểm thử tải hệ thống đợt cao điểm du lịch biển đảo",
+          desc: "Sử dụng k6 stress test 10,000 CCU đồng thời truy cập tra cứu lịch tàu cao tốc Rạch Giá - Phú Quốc.",
+          status: "TODO" as TaskStatus,
+          priority: "HIGH" as TaskPriority,
+          deptId: "it" as DepartmentId,
+          tags: ["Performance", "QA", "Kiên Giang"],
+          dueOffset: 6,
+        },
+      ],
+    },
+  ];
+
+  GOV_PROJECTS_MOCK.forEach((govProj) => {
+    govProj.tasks.forEach((t) => {
+      const itEmployees = MOCK_USERS.filter((u) => u.departmentId === t.deptId);
+      const assigneeId = itEmployees.length > 0 ? itEmployees[0].id : MOCK_USERS[1].id;
+      const dueDate = addDays(new Date(), t.dueOffset);
+
+      tasks.push({
+        id: `task-${taskIndex++}`,
+        code: t.code,
+        title: t.title,
+        description: t.desc,
+        projectId: govProj.projectId,
+        projectName: govProj.projectName,
+        projectKey: govProj.projectKey,
+        status: t.status,
+        priority: t.priority,
+        departmentId: t.deptId,
+        creatorId: MOCK_USERS[0].id,
+        assigneeIds: [assigneeId],
+        dueDate: dueDate.toISOString(),
+        startDate: subDays(dueDate, 4).toISOString(),
+        checklist: [
+          { id: `chk-${taskIndex}-1`, title: "Tiếp nhận và lên kế hoạch chi tiết", isCompleted: true },
+          { id: `chk-${taskIndex}-2`, title: "Tiến hành triển khai kỹ thuật & tích hợp", isCompleted: t.status !== "TODO" },
+          { id: `chk-${taskIndex}-3`, title: "Kiểm thử và nghiệm thu với Sở", isCompleted: t.status === "DONE" },
+        ],
+        commentsCount: 2,
+        tags: t.tags,
+        requiresApproval: false,
+        isApproved: true,
+        createdAt: subDays(new Date(), 8).toISOString(),
+        updatedAt: subDays(new Date(), 1).toISOString(),
+      });
     });
   });
 

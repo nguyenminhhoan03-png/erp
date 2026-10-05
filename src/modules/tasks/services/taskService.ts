@@ -9,7 +9,7 @@ function fakeDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const STORAGE_KEY = "erp_tasks_cache_v1";
+const STORAGE_KEY = "erp_tasks_cache_v3";
 
 // Cache in-memory / localStorage để giữ trạng thái khi demo
 function getStoredTasks(): Task[] {
@@ -62,8 +62,13 @@ export const taskService = {
         (t) =>
           t.title.toLowerCase().includes(q) ||
           t.code.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q)
+          t.description.toLowerCase().includes(q) ||
+          (t.projectName && t.projectName.toLowerCase().includes(q))
       );
+    }
+
+    if (params.projectId && params.projectId !== "ALL") {
+      result = result.filter((t) => t.projectId === params.projectId);
     }
 
     if (params.departmentId && params.departmentId !== "ALL") {
@@ -100,7 +105,8 @@ export const taskService = {
   async createTask(data: Omit<Task, "id" | "code" | "createdAt" | "updatedAt">): Promise<Task> {
     await fakeDelay();
     const newId = `task-${Date.now()}`;
-    const newCode = `ERP-${Math.floor(100 + Math.random() * 900)}`;
+    const pKey = data.projectKey || (data.projectId === "ERP_CORE" ? "ERP" : "ERP");
+    const newCode = `${pKey}-${Math.floor(100 + Math.random() * 900)}`;
     const now = new Date().toISOString();
 
     const newTask: Task = {

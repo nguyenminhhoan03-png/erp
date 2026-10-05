@@ -9,6 +9,7 @@ export const taskFormSchema = z.object({
     .string()
     .min(10, "Mô tả công việc phải có ít nhất 10 ký tự")
     .max(2000, "Mô tả không được vượt quá 2000 ký tự"),
+  projectId: z.string(),
   departmentId: z.enum(["it", "marketing", "hr", "sales", "accounting"], {
     message: "Vui lòng chọn phòng ban phụ trách",
   }),

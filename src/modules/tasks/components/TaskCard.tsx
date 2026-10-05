@@ -11,7 +11,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Task } from "../types";
-import { TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG } from "../constants";
+import { TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG, AVAILABLE_PROJECTS } from "../constants";
 import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { UserAvatar } from "@/shared/components/UserAvatar";
@@ -51,6 +51,7 @@ export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
 
   const priorityConfig = TASK_PRIORITY_CONFIG[task.priority];
   const department = MOCK_DEPARTMENTS.find((d) => d.id === task.departmentId);
+  const project = AVAILABLE_PROJECTS.find((p) => p.id === task.projectId);
   const overdue = isOverdue(task.dueDate, task.status);
 
   // Lấy danh sách users được gán
@@ -77,7 +78,7 @@ export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
         overdue && "border-rose-300/80 dark:border-rose-900/60"
       )}
     >
-      {/* Top Header: Code, Department, Priority / Resolution */}
+      {/* Top Header: Code, Department, Project, Priority / Resolution */}
       <div className="flex items-center justify-between gap-1 text-xs">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className={cn(
@@ -97,6 +98,14 @@ export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
               }}
             >
               {department.code}
+            </Badge>
+          )}
+          {project && (
+            <Badge
+              variant="outline"
+              className={cn("text-[10px] px-1.5 py-0 h-4 font-semibold uppercase tracking-tight", project.badgeBg, project.badgeText)}
+            >
+              {project.category === "GOV_SOLUTION" ? `🏛️ ${project.key}` : project.key}
             </Badge>
           )}
         </div>
@@ -125,15 +134,23 @@ export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
         </div>
       </div>
 
-      {/* Task Title */}
-      <h4 className={cn(
-        "text-sm font-semibold line-clamp-2 leading-snug transition-colors",
-        task.status === "CANCELLED"
-          ? "text-muted-foreground line-through decoration-muted-foreground/60"
-          : "text-foreground group-hover:text-primary"
-      )}>
-        {task.title}
-      </h4>
+      {/* Task Title & Project Subtitle */}
+      <div className="flex flex-col gap-0.5">
+        {project && project.category === "GOV_SOLUTION" && (
+          <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+            {project.name}
+          </span>
+        )}
+        <h4 className={cn(
+          "text-sm font-semibold line-clamp-2 leading-snug transition-colors",
+          task.status === "CANCELLED"
+            ? "text-muted-foreground line-through decoration-muted-foreground/60"
+            : "text-foreground group-hover:text-primary"
+        )}>
+          {task.title}
+        </h4>
+      </div>
 
       {/* Footer Info: Due Date, Checklist, Comments, Assignees */}
       <div className="flex items-center justify-between pt-2 border-t border-border/60 text-xs text-muted-foreground">

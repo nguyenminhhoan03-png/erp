@@ -9,11 +9,12 @@ import {
   List,
   Plus,
   UserCheck,
+  Briefcase,
 } from "lucide-react";
 import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
-import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from "../constants";
+import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, AVAILABLE_PROJECTS } from "../constants";
 import { TaskPriority, TaskStatus } from "../types";
 import { DepartmentId } from "@/shared/types";
 import { Input } from "@/shared/components/ui/input";
@@ -46,9 +47,11 @@ export function TaskFilters() {
 
   const isFiltered =
     Boolean(filters.search) ||
+    (filters.projectId && filters.projectId !== "ALL") ||
     filters.departmentId !== "ALL" ||
     filters.assigneeId !== "ALL" ||
     filters.priority !== "ALL" ||
+    filters.status !== "ALL" ||
     filters.isMyTasksOnly;
 
   return (
@@ -123,6 +126,58 @@ export function TaskFilters() {
 
       {/* Filter Selectors Bar */}
       <div className="flex flex-wrap items-center gap-2.5 text-xs">
+        {/* Project Filter (Chuẩn Enterprise Multi-Project) */}
+        <div className="w-[210px]">
+          <Select
+            value={filters.projectId || "ALL"}
+            onValueChange={(val) => setFilters({ projectId: val })}
+          >
+            <SelectTrigger className="h-8.5 rounded-lg bg-card/60 text-xs border-primary/30 font-medium">
+              <div className="flex items-center gap-1.5 truncate">
+                <Briefcase className="h-3.5 w-3.5 text-primary shrink-0" />
+                <SelectValue placeholder="Dự án">
+                  {!filters.projectId || filters.projectId === "ALL"
+                    ? "Tất cả dự án"
+                    : AVAILABLE_PROJECTS.find((p) => p.id === filters.projectId)?.name}
+                </SelectValue>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span>🌐 Tất cả dự án</span>
+                </div>
+              </SelectItem>
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
+                Dự án Nội bộ
+              </div>
+              {AVAILABLE_PROJECTS.filter((p) => p.category === "INTERNAL").map((proj) => (
+                <SelectItem key={proj.id} value={proj.id}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                      [{proj.key}]
+                    </span>
+                    <span>{proj.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
+                Dự án CĐS Tỉnh (Bước 6)
+              </div>
+              {AVAILABLE_PROJECTS.filter((p) => p.category === "GOV_SOLUTION").map((proj) => (
+                <SelectItem key={proj.id} value={proj.id}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[11px] font-bold text-orange-600 dark:text-orange-400">
+                      [{proj.key}]
+                    </span>
+                    <span>{proj.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Department Filter */}
         <div className="w-[170px]">
           <Select

@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Task } from "../types";
-import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG } from "../constants";
+import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG, AVAILABLE_PROJECTS } from "../constants";
 import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { UserAvatar } from "@/shared/components/UserAvatar";
@@ -33,7 +33,8 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
         <table className="w-full text-left text-sm border-collapse">
           <thead>
             <tr className="border-b border-border/80 bg-muted/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <th className="py-3 px-4 w-28">Mã</th>
+              <th className="py-3 px-4 w-24">Mã</th>
+              <th className="py-3 px-4 w-36">Dự án</th>
               <th className="py-3 px-4 min-w-[280px]">Tiêu đề công việc</th>
               <th className="py-3 px-4 w-32">Phòng ban</th>
               <th className="py-3 px-4 w-36">Trạng thái</th>
@@ -48,6 +49,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
               const statusCfg = TASK_STATUS_CONFIG[task.status];
               const priorityCfg = TASK_PRIORITY_CONFIG[task.priority];
               const dept = MOCK_DEPARTMENTS.find((d) => d.id === task.departmentId);
+              const project = AVAILABLE_PROJECTS.find((p) => p.id === task.projectId);
               const overdue = isOverdue(task.dueDate, task.status);
               const assignees = task.assigneeIds
                 .map((id) => getUserById(id))
@@ -62,6 +64,20 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                   {/* Mã Task */}
                   <td className="py-3 px-4 font-mono font-semibold text-xs text-muted-foreground group-hover:text-primary transition-colors">
                     {task.code}
+                  </td>
+
+                  {/* Dự án */}
+                  <td className="py-3 px-4">
+                    {project ? (
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[10px] font-semibold", project.badgeBg, project.badgeText)}
+                      >
+                        {project.category === "GOV_SOLUTION" ? `🏛️ ${project.key}` : project.key}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs font-mono">ERP</span>
+                    )}
                   </td>
 
                   {/* Tiêu đề & tags */}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { RoleSwitcher } from "./RoleSwitcher";
+import { UserMenu } from "./UserMenu";
 import { useUserStore } from "../store/useUserStore";
 import { useSidebarStore } from "../store/useSidebarStore";
 import { MOCK_DEPARTMENTS } from "../mock/departments";
@@ -49,7 +50,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2.5">
-        <RoleSwitcher />
+        {process.env.NEXT_PUBLIC_DEMO_MODE === "true" ? <RoleSwitcher /> : <UserMenu />}
       </div>
     </header>
   );

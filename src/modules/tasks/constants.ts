@@ -1,4 +1,4 @@
-import { TaskPriority, TaskResolution, TaskStatus } from "./types";
+import { TaskPriority, TaskResolution, TaskStatus, TaskProject } from "./types";
 
 /**
  * CẤU HÌNH HỆ THỐNG:
@@ -186,4 +186,52 @@ export const KANBAN_COLUMNS: TaskStatus[] = [
   "IN_REVIEW",
   "DONE",
   "CANCELLED",
+];
+
+// Danh mục Dự án phục vụ phân bổ & lọc task chuẩn Enterprise ERP (Jira Multi-Project)
+export const AVAILABLE_PROJECTS: TaskProject[] = [
+  {
+    id: "ERP_CORE",
+    key: "ERP",
+    name: "Hệ thống ERP Doanh nghiệp",
+    category: "INTERNAL",
+    badgeBg: "bg-blue-500/10 dark:bg-blue-950/40",
+    badgeText: "text-blue-600 dark:text-blue-400 border-blue-500/30",
+  },
+  {
+    id: "DLTM_LCA",
+    key: "LCA",
+    name: "CĐS Du lịch - Tỉnh Lào Cai",
+    category: "GOV_SOLUTION",
+    badgeBg: "bg-orange-500/10 dark:bg-orange-950/40",
+    badgeText: "text-orange-600 dark:text-orange-400 border-orange-500/30",
+    provinceCode: "LCA",
+  },
+  {
+    id: "DLTM_LDO",
+    key: "LDO",
+    name: "CĐS Du lịch - Tỉnh Lâm Đồng",
+    category: "GOV_SOLUTION",
+    badgeBg: "bg-emerald-500/10 dark:bg-emerald-950/40",
+    badgeText: "text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+    provinceCode: "LDO",
+  },
+  {
+    id: "DLTM_KGI",
+    key: "KGI",
+    name: "CĐS Du lịch - Tỉnh Kiên Giang",
+    category: "GOV_SOLUTION",
+    badgeBg: "bg-cyan-500/10 dark:bg-cyan-950/40",
+    badgeText: "text-cyan-600 dark:text-cyan-400 border-cyan-500/30",
+    provinceCode: "KGI",
+  },
+  {
+    id: "DLTM_DNG",
+    key: "DNG",
+    name: "CĐS Du lịch - TP. Đà Nẵng",
+    category: "GOV_SOLUTION",
+    badgeBg: "bg-indigo-500/10 dark:bg-indigo-950/40",
+    badgeText: "text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+    provinceCode: "DNG",
+  },
 ];

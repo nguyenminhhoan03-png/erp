@@ -42,11 +42,24 @@ export interface TaskActivityLog {
   createdAt: string;
 }
 
+export interface TaskProject {
+  id: string; // e.g. "ERP_CORE", "DLTM_LCA", "DLTM_LDO", "DLTM_KGI"
+  key: string; // e.g. "ERP", "LCA", "LDO", "KGI"
+  name: string; // e.g. "Hệ thống ERP Doanh nghiệp", "CĐS Du lịch - Tỉnh Lào Cai"
+  category: "INTERNAL" | "GOV_SOLUTION";
+  badgeBg: string;
+  badgeText: string;
+  provinceCode?: string;
+}
+
 export interface Task {
   id: string;
-  code: string; // e.g. ERP-101
+  code: string; // e.g. ERP-101, LCA-01
   title: string;
   description: string;
+  projectId?: string; // e.g. "ERP_CORE", "DLTM_LCA"
+  projectName?: string;
+  projectKey?: string; // e.g. "ERP", "LCA"
   status: TaskStatus;
   priority: TaskPriority;
   departmentId: DepartmentId;
@@ -98,6 +111,7 @@ export interface DailyReport {
 
 export interface TaskFilterParams {
   search?: string;
+  projectId?: string | "ALL";
   departmentId?: DepartmentId | "ALL";
   assigneeId?: string | "ALL";
   priority?: TaskPriority | "ALL";

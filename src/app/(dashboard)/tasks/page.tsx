@@ -12,6 +12,7 @@ import { EmptyState } from "@/shared/components/EmptyState";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Button } from "@/shared/components/ui/button";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AlertCircle, RefreshCw, Layers, KanbanSquare, FileSpreadsheet, FileCheck2 } from "lucide-react";
 import { Task } from "@/modules/tasks/types";
 
@@ -36,12 +37,13 @@ const KanbanBoard = dynamic(
   }
 );
 
-export default function TasksPage() {
+function TasksPageContent() {
   const {
     tasks,
     isLoading,
     error,
     fetchTasks,
+    setFilters,
     resetToDefault,
     viewMode,
     openDetail,
@@ -49,10 +51,16 @@ export default function TasksPage() {
     filters,
   } = useTaskStore();
   const { currentUser } = useUserStore();
+  const searchParams = useSearchParams();
+  const urlProjectId = searchParams.get("projectId");
 
   React.useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    if (urlProjectId) {
+      setFilters({ projectId: urlProjectId });
+    } else {
+      fetchTasks();
+    }
+  }, [urlProjectId, fetchTasks, setFilters]);
 
   const handleTaskClick = (task: Task) => {
     openDetail(task);
@@ -68,7 +76,7 @@ export default function TasksPage() {
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-card text-foreground shadow-2xs"
           >
             <KanbanSquare className="h-3.5 w-3.5 text-primary" />
-            <span>Bảng công việc (Jira Board)</span>
+            <span>Bảng công việc</span>
           </Link>
           <Link
             href="/daily-report"
@@ -167,5 +175,20 @@ export default function TasksPage() {
       <TaskDialog />
       <TaskFormDialog />
     </div>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex items-center justify-center p-12 text-muted-foreground text-xs">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-2" />
+          <span>Đang tải bảng công việc...</span>
+        </div>
+      }
+    >
+      <TasksPageContent />
+    </React.Suspense>
   );
 }

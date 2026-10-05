@@ -4,11 +4,11 @@ import * as React from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, addDays } from "date-fns";
-import { Calendar, Plus, Users, ShieldAlert, Sparkles, UserPlus, Clock } from "lucide-react";
+import { Calendar, Plus, Users, ShieldAlert, Sparkles, UserPlus, Clock, Briefcase } from "lucide-react";
 import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
-import { REQUIRE_SELF_TASK_APPROVAL, TASK_PRIORITY_CONFIG } from "../constants";
+import { REQUIRE_SELF_TASK_APPROVAL, TASK_PRIORITY_CONFIG, AVAILABLE_PROJECTS } from "../constants";
 import { taskFormSchema, TaskFormValues } from "../schemas";
 import { DepartmentId, User } from "@/shared/types";
 import { TaskStatus } from "../types";
@@ -57,6 +57,7 @@ export function TaskFormDialog() {
     defaultValues: {
       title: "",
       description: "",
+      projectId: "ERP_CORE",
       departmentId: currentUser.departmentId,
       priority: "MEDIUM",
       assigneeIds: isEmployee ? [currentUser.id] : [],
@@ -77,6 +78,7 @@ export function TaskFormDialog() {
       reset({
         title: "",
         description: "",
+        projectId: "ERP_CORE",
         departmentId: currentUser.departmentId,
         priority: "MEDIUM",
         assigneeIds: isEmployee ? [currentUser.id] : [],
@@ -142,9 +144,14 @@ export function TaskFormDialog() {
             .filter(Boolean)
         : [];
 
+      const selectedProj = AVAILABLE_PROJECTS.find((p) => p.id === values.projectId);
+
       await createTask({
         title: values.title,
         description: values.description,
+        projectId: values.projectId || "ERP_CORE",
+        projectName: selectedProj?.name || "Hệ thống ERP Doanh nghiệp",
+        projectKey: selectedProj?.key || "ERP",
         departmentId: values.departmentId,
         priority: values.priority,
         creatorId: currentUser.id,
@@ -211,6 +218,49 @@ export function TaskFormDialog() {
                 {errors.title.message}
               </span>
             )}
+          </div>
+
+          {/* Thuộc Dự án (Chuẩn Jira Multi-Project) */}
+          <div>
+            <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5">
+              <Briefcase className="h-3.5 w-3.5 text-primary" />
+              <span>Thuộc Dự án <span className="text-rose-500">*</span></span>
+            </label>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Select value={field.value || "ERP_CORE"} onValueChange={field.onChange}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Chọn dự án" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
+                      Dự án Nội bộ
+                    </div>
+                    {AVAILABLE_PROJECTS.filter((p) => p.category === "INTERNAL").map((proj) => (
+                      <SelectItem key={proj.id} value={proj.id}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400">[{proj.key}]</span>
+                          <span>{proj.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
+                      Dự án CĐS Tỉnh (Bước 6)
+                    </div>
+                    {AVAILABLE_PROJECTS.filter((p) => p.category === "GOV_SOLUTION").map((proj) => (
+                      <SelectItem key={proj.id} value={proj.id}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-bold text-orange-600 dark:text-orange-400">[{proj.key}]</span>
+                          <span>{proj.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
 
           {/* Phòng ban & Mức độ ưu tiên */}

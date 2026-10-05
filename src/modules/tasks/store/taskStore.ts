@@ -58,6 +58,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   error: null,
   filters: {
     search: "",
+    projectId: "ALL",
     departmentId: "ALL",
     assigneeId: "ALL",
     priority: "ALL",
@@ -92,6 +93,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({
       filters: {
         search: "",
+        projectId: "ALL",
         departmentId: "ALL",
         assigneeId: "ALL",
         priority: "ALL",

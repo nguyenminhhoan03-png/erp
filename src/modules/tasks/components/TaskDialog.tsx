@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
-import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG } from "../constants";
+import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG, AVAILABLE_PROJECTS } from "../constants";
 import { TaskResolution } from "../types";
 import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { can, checkTaskTransitionPermission } from "@/shared/permissions/can";
@@ -91,6 +91,7 @@ export function TaskDialog() {
   const statusCfg = TASK_STATUS_CONFIG[activeTask.status];
   const priorityCfg = TASK_PRIORITY_CONFIG[activeTask.priority];
   const dept = MOCK_DEPARTMENTS.find((d) => d.id === activeTask.departmentId);
+  const project = AVAILABLE_PROJECTS.find((p) => p.id === activeTask.projectId);
   const creator = getUserById(activeTask.creatorId);
   const overdue = isOverdue(activeTask.dueDate, activeTask.status);
 
@@ -197,6 +198,14 @@ export function TaskDialog() {
             <span className="font-mono font-bold text-sm text-primary bg-primary/10 px-2 py-0.5 rounded-md">
               {activeTask.code}
             </span>
+            {project && (
+              <Badge
+                variant="outline"
+                className={cn("text-xs font-semibold", project.badgeBg, project.badgeText)}
+              >
+                {project.category === "GOV_SOLUTION" ? `🏛️ ${project.name}` : project.name}
+              </Badge>
+            )}
             {dept && (
               <Badge
                 variant="outline"

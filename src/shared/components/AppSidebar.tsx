@@ -19,6 +19,7 @@ import {
   PanelLeftOpen,
   ChevronDown,
   ShieldCheck,
+  Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "../store/useUserStore";
@@ -57,7 +58,21 @@ export function AppSidebar() {
   }).length;
 
   // Cấu trúc phân nhóm theo từng Phân hệ ERP chuẩn mực
-  const moduleGroups = [
+  interface SidebarItem {
+    title: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string;
+    badgeVariant?: "default" | "warning";
+    requiresPermission?: () => boolean;
+  }
+
+  interface ModuleGroup {
+    groupTitle: string;
+    items: SidebarItem[];
+  }
+
+  const moduleGroups: ModuleGroup[] = [
     {
       groupTitle: "TỔNG QUAN",
       items: [
@@ -65,6 +80,17 @@ export function AppSidebar() {
           title: "Bàn làm việc (Dashboard)",
           href: "/dashboard",
           icon: LayoutDashboard,
+        },
+      ],
+    },
+    {
+      groupTitle: "DỰ ÁN & THỊ TRƯỜNG",
+      items: [
+        {
+          title: "Dự án CĐS",
+          href: "/gov-projects",
+          icon: Compass,
+          badgeVariant: "default" as const,
         },
       ],
     },
@@ -121,7 +147,6 @@ export function AppSidebar() {
   ];
 
   const upcomingModules = [
-    { title: "Quản lý Khách hàng (CRM)", icon: Sparkles, tag: "Q1" },
     { title: "Nội dung & Tin tức (CMS)", icon: Layers, tag: "Q2" },
     { title: "Kế toán & Hóa đơn", icon: Building2, tag: "Q3" },
   ];
