@@ -6,7 +6,23 @@ export type TaskStatus =
   | "IN_PROGRESS"      // Đang làm
   | "IN_REVIEW"        // Chờ review / Chờ nghiệm thu
   | "DONE"             // Hoàn thành
-  | "CANCELLED";       // Đã hủy / Đã đóng (Closed/Cancelled)
+  | "CANCELLED"        // Đã hủy / Đã đóng (Closed/Cancelled)
+  | (string & {});
+
+export type StatusCategory = "TODO" | "IN_PROGRESS" | "DONE";
+
+export interface CustomTaskStatus {
+  id: string;
+  key: string;
+  name: string;
+  category: StatusCategory;
+  color: string;
+  orderIndex: number;
+  isDefault?: boolean;
+  isSystem?: boolean;
+  projectId?: string | null;
+  departmentId?: string | null;
+}
 
 export type TaskResolution =
   | "DONE"             // Hoàn thành / Resolved
@@ -45,11 +61,13 @@ export interface TaskActivityLog {
 export interface TaskProject {
   id: string; // e.g. "ERP_CORE", "DLTM_LCA", "DLTM_LDO", "DLTM_KGI"
   key: string; // e.g. "ERP", "LCA", "LDO", "KGI"
+  code?: string; // e.g. DLTM
   name: string; // e.g. "Hệ thống ERP Doanh nghiệp", "CĐS Du lịch - Tỉnh Lào Cai"
   category: "INTERNAL" | "GOV_SOLUTION";
-  badgeBg: string;
-  badgeText: string;
+  badgeBg?: string;
+  badgeText?: string;
   provinceCode?: string;
+  groupName?: string;
 }
 
 export interface Task {
@@ -69,6 +87,7 @@ export interface Task {
   assignees?: User[];
   dueDate: string; // ISO string
   startDate?: string;
+  estimatedHours?: number;
   checklist: TaskChecklistItem[];
   commentsCount: number;
   tags: string[];
@@ -118,4 +137,19 @@ export interface TaskFilterParams {
   status?: TaskStatus | "ALL";
   isMyTasksOnly?: boolean;
   dueDateRange?: "today" | "this_week" | "overdue" | "all";
+  perPage?: number;
+  cursor?: string;
 }
+
+export interface TaskPaginationMeta {
+  per_page: number;
+  next_cursor: string | null;
+  prev_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface TaskFetchResult {
+  tasks: Task[];
+  meta: TaskPaginationMeta | null;
+}
+

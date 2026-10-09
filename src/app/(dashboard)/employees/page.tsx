@@ -12,7 +12,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { useUserStore } from "@/shared/store/useUserStore";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { DepartmentId, Role, User } from "@/shared/types";
 import { UserAvatar } from "@/shared/components/UserAvatar";
 import { UserFormDialog } from "@/shared/components/UserFormDialog";
@@ -33,7 +32,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export default function EmployeesPage() {
-  const { users, currentUser, deleteUser } = useUserStore();
+  const { users, currentUser, deleteUser, departments } = useUserStore();
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [selectedDept, setSelectedDept] = React.useState<DepartmentId | "ALL">("ALL");
@@ -142,12 +141,12 @@ export default function EmployeesPage() {
               <SelectValue placeholder="Phòng ban">
                 {selectedDept === "ALL"
                   ? "Tất cả phòng ban"
-                  : MOCK_DEPARTMENTS.find((d) => d.id === selectedDept)?.name}
+                  : departments.find((d) => d.id === selectedDept)?.name}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Tất cả phòng ban</SelectItem>
-              {MOCK_DEPARTMENTS.map((d) => (
+              {departments.map((d) => (
                 <SelectItem key={d.id} value={d.id}>
                   {d.name}
                 </SelectItem>
@@ -194,7 +193,7 @@ export default function EmployeesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredUsers.map((user) => {
             const isCurrent = user.id === currentUser.id;
-            const dept = MOCK_DEPARTMENTS.find((d) => d.id === user.departmentId);
+            const dept = departments.find((d) => d.id === user.departmentId);
 
             return (
               <div

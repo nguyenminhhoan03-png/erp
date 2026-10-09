@@ -48,11 +48,9 @@ import { useUserStore } from "@/shared/store/useUserStore";
 import { useGovStore } from "@/modules/gov-solutions/store/govStore";
 import { GOV_STAGES } from "@/modules/gov-solutions/constants";
 import { GovStage } from "@/modules/gov-solutions/types";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import {
   TASK_STATUS_CONFIG,
   TASK_PRIORITY_CONFIG,
-  AVAILABLE_PROJECTS,
 } from "@/modules/tasks/constants";
 import { TaskDialog } from "@/modules/tasks/components/TaskDialog";
 import { TaskFormDialog } from "@/modules/tasks/components/TaskFormDialog";
@@ -64,8 +62,8 @@ import { DailyReport, Task } from "@/modules/tasks/types";
 import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { tasks, fetchTasks, openDetail, openCreate } = useTaskStore();
-  const { currentUser, getUserById } = useUserStore();
+  const { tasks, fetchTasks, openDetail, openCreate, projects: taskProjects } = useTaskStore();
+  const { currentUser, getUserById, departments } = useUserStore();
   const {
     projects,
     meetings,
@@ -100,7 +98,7 @@ export default function DashboardPage() {
     return tasks.filter((t) => t.assigneeIds.includes(currentUser.id));
   }, [tasks, currentUser]);
 
-  const dept = MOCK_DEPARTMENTS.find((d) => d.id === currentUser.departmentId);
+  const dept = departments.find((d) => d.id === currentUser.departmentId);
 
   // Số liệu Vận hành Nội bộ (Operational Task KPIs)
   const activeTasks = userTasks.filter((t) => t.status === "IN_PROGRESS" || t.status === "TODO");
@@ -119,11 +117,11 @@ export default function DashboardPage() {
   // Số liệu Chiến lược B2G (34 Tỉnh thành CĐS Quốc Gia)
   const activeSolution = getActiveSolution();
   const currentSolutionProjects = React.useMemo(() => {
-    return projects.filter((p) => (p.solutionId || "dltm") === activeSolutionId);
+    return projects.filter((p) => !activeSolutionId || p.solutionId === activeSolutionId);
   }, [projects, activeSolutionId]);
 
-  const govTotalCount = currentSolutionProjects.length || 34;
-  const govDispatchedCount = currentSolutionProjects.length || 34;
+  const govTotalCount = currentSolutionProjects.length;
+  const govDispatchedCount = currentSolutionProjects.filter((p) => p.stage !== "NOT_STARTED").length;
   const govWorkedWithCount = React.useMemo(() => {
     return currentSolutionProjects.filter((p) =>
       ["MOU_SIGNED", "SPONSOR_AGREED", "DATA_COLLECT", "DEPLOYING", "COMPLETED"].includes(p.stage)
@@ -199,9 +197,10 @@ export default function DashboardPage() {
 
   // Helper lấy thông tin Project cho Task
   const getProjectInfo = React.useCallback((projectId?: string) => {
-    if (!projectId) return AVAILABLE_PROJECTS[0];
-    return AVAILABLE_PROJECTS.find((p) => p.id === projectId) || AVAILABLE_PROJECTS[0];
-  }, []);
+    const fallback = taskProjects[0] || { id: "ERP_CORE", key: "ERP", name: "Hệ thống ERP Doanh nghiệp", category: "INTERNAL", badgeBg: "bg-blue-500/10", badgeText: "text-blue-600" };
+    if (!projectId) return fallback;
+    return taskProjects.find((p) => p.id === projectId) || fallback;
+  }, [taskProjects]);
 
   // Danh sách công việc ưu tiên cần làm gấp (Top 5)
   const priorityTasks = React.useMemo(() => {
@@ -772,7 +771,7 @@ export default function DashboardPage() {
                 const overdue = isOverdue(task.dueDate, task.status);
                 const priorityCfg = TASK_PRIORITY_CONFIG[task.priority];
                 const statusCfg = TASK_STATUS_CONFIG[task.status];
-                const taskDept = MOCK_DEPARTMENTS.find((d) => d.id === task.departmentId);
+                const taskDept = departments.find((d) => d.id === task.departmentId);
                 const projInfo = getProjectInfo(task.projectId);
 
                 return (

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { User } from "../types";
-import { MOCK_USERS } from "../mock/users";
+import { Department } from "../types";
 
 const USERS_STORAGE_KEY = "erp_users_cache_v1";
 
@@ -18,9 +18,7 @@ function getInitialUsers(): User[] {
       // Ignore
     }
   }
-  const defaultUsers = [...MOCK_USERS];
-  saveUsers(defaultUsers);
-  return defaultUsers;
+  return [];
 }
 
 function saveUsers(users: User[]): void {
@@ -41,6 +39,10 @@ interface UserState {
   addUser: (userData: Omit<User, "id">) => User;
   updateUser: (id: string, updates: Partial<User>) => void;
   deleteUser: (id: string) => void;
+  
+  departments: Department[];
+  fetchUsers: () => Promise<void>;
+  fetchDepartments: () => Promise<void>;
 }
 
 const initialList = getInitialUsers();
@@ -80,4 +82,31 @@ export const useUserStore = create<UserState>((set, get) => ({
     set({ users: updated });
     saveUsers(updated);
   },
+
+  departments: [],
+
+  fetchUsers: async () => {
+    try {
+      const { apiRequest } = await import("@/lib/api-client");
+      const res = await apiRequest<{ success: boolean; data: any[] }>("/erp/users");
+      if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+        set({ users: res.data });
+        saveUsers(res.data);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch users", err);
+    }
+  },
+
+  fetchDepartments: async () => {
+    try {
+      const { apiRequest } = await import("@/lib/api-client");
+      const res = await apiRequest<{ success: boolean; data: any[] }>("/erp/departments");
+      if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+        set({ departments: res.data });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch departments", err);
+    }
+  }
 }));

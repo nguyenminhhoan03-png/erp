@@ -49,6 +49,9 @@ function TasksPageContent() {
     openDetail,
     openCreate,
     filters,
+    isFetchingMore,
+    hasMore,
+    fetchMoreTasks,
   } = useTaskStore();
   const { currentUser } = useUserStore();
   const searchParams = useSearchParams();
@@ -68,39 +71,6 @@ function TasksPageContent() {
 
   return (
     <div className="flex flex-col h-full space-y-4">
-      {/* Phân hệ Công việc: Sub-navigation Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
-        <div className="flex items-center gap-1.5 p-1 bg-muted/50 rounded-xl border border-border/60">
-          <Link
-            href="/tasks"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-card text-foreground shadow-2xs"
-          >
-            <KanbanSquare className="h-3.5 w-3.5 text-primary" />
-            <span>Bảng công việc</span>
-          </Link>
-          <Link
-            href="/daily-report"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-card/50 transition-colors"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            <span>Báo cáo ngày</span>
-          </Link>
-          {(currentUser.role === "ADMIN" || currentUser.role === "MANAGER") && (
-            <Link
-              href="/approvals"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-card/50 transition-colors"
-            >
-              <FileCheck2 className="h-3.5 w-3.5" />
-              <span>Duyệt công việc</span>
-            </Link>
-          )}
-        </div>
-
-        <p className="text-xs text-muted-foreground hidden md:block">
-          Phân hệ: <strong className="text-foreground">Quản lý Công việc & Quy trình</strong>
-        </p>
-      </div>
-
       {/* Filter and Control Bar */}
       <TaskFilters />
 
@@ -166,7 +136,28 @@ function TasksPageContent() {
           {viewMode === "kanban" ? (
             <KanbanBoard onTaskClick={handleTaskClick} onAddTask={() => openCreate()} />
           ) : (
-            <TaskListView tasks={tasks} onTaskClick={handleTaskClick} />
+            <div className="space-y-4 pb-6">
+              <TaskListView tasks={tasks} onTaskClick={handleTaskClick} />
+              {hasMore["ALL"] && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchMoreTasks()}
+                    disabled={isFetchingMore["ALL"]}
+                    className="w-full max-w-sm rounded-xl border-dashed bg-muted/30"
+                  >
+                    {isFetchingMore["ALL"] ? (
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Đang tải thêm...</span>
+                      </div>
+                    ) : (
+                      "Tải thêm công việc"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
         </>
       )}

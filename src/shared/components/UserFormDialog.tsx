@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { UserPlus, Sparkles } from "lucide-react";
 import { useUserStore } from "../store/useUserStore";
-import { MOCK_DEPARTMENTS } from "../mock/departments";
 import { DepartmentId, Role } from "../types";
 import {
   Dialog,
@@ -34,9 +33,7 @@ const userSchema = z.object({
   email: z.string().email("Email không hợp lệ").endsWith("@congty.vn", "Email phải có đuôi @congty.vn hoặc domain nội bộ").or(z.string().email()),
   title: z.string().min(2, "Vui lòng nhập chức danh"),
   phone: z.string().min(9, "Số điện thoại không hợp lệ"),
-  departmentId: z.enum(["it", "marketing", "hr", "sales", "accounting"], {
-    message: "Vui lòng chọn phòng ban",
-  }),
+  departmentId: z.string().min(1, "Vui lòng chọn phòng ban"),
   role: z.string().min(1, "Vui lòng chọn vai trò"),
 });
 
@@ -63,7 +60,7 @@ export function UserFormDialog({
   onOpenChange,
   defaultDepartmentId = "it",
 }: UserFormDialogProps) {
-  const { addUser, setCurrentUser } = useUserStore();
+  const { addUser, setCurrentUser, departments } = useUserStore();
 
   const availableRoles = React.useMemo<RoleConfig[]>(() => {
     if (typeof window !== "undefined") {
@@ -232,7 +229,7 @@ export function UserFormDialog({
                       <SelectValue placeholder="Chọn phòng" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MOCK_DEPARTMENTS.map((d) => (
+                      {departments.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
                           {d.code} - {d.name}
                         </SelectItem>

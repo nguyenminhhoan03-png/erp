@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import { useTaskStore } from "@/modules/tasks/store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { TASK_STATUS_CONFIG } from "@/modules/tasks/constants";
 import { UserAvatar } from "@/shared/components/UserAvatar";
 import { Badge } from "@/shared/components/ui/badge";
@@ -35,7 +34,7 @@ import { isOverdue } from "@/lib/date";
 
 export default function StatisticsPage() {
   const { tasks, fetchTasks } = useTaskStore();
-  const { currentUser, users } = useUserStore();
+  const { currentUser, users, departments } = useUserStore();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -81,7 +80,7 @@ export default function StatisticsPage() {
 
   // 3. Dữ liệu Biểu đồ Cột: Phân bổ theo phòng ban
   const departmentChartData = React.useMemo(() => {
-    return MOCK_DEPARTMENTS.map((dept) => {
+    return departments.map((dept) => {
       const deptTasks = tasks.filter((t) => t.departmentId === dept.id);
       return {
         name: dept.code,
@@ -327,7 +326,7 @@ export default function StatisticsPage() {
             </thead>
             <tbody className="divide-y divide-border/60">
               {missingReportUsers.map((user) => {
-                const dept = MOCK_DEPARTMENTS.find((d) => d.id === user.departmentId);
+                const dept = departments.find((d) => d.id === user.departmentId);
                 return (
                   <tr key={user.id} className="hover:bg-muted/30 transition-colors">
                     <td className="py-2.5 px-3">

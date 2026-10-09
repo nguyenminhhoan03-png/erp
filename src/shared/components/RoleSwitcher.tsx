@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Check, ChevronsUpDown, ShieldAlert, UserCheck, Users } from "lucide-react";
 import { useUserStore } from "../store/useUserStore";
-import { MOCK_DEPARTMENTS } from "../mock/departments";
 import { User, Role } from "../types";
 import {
   DropdownMenu,
@@ -21,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export function RoleSwitcher() {
-  const { currentUser, setCurrentUser, users } = useUserStore();
+  const { currentUser, setCurrentUser, users, departments } = useUserStore();
 
   const handleSelectUser = (user: User) => {
     setCurrentUser(user);
@@ -53,7 +52,7 @@ export function RoleSwitcher() {
   };
 
   const getDeptName = (deptId: string) => {
-    const dept = MOCK_DEPARTMENTS.find((d) => d.id === deptId);
+    const dept = departments.find((d) => d.id === deptId);
     return dept ? dept.code : deptId.toUpperCase();
   };
 

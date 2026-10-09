@@ -11,13 +11,23 @@ import {
   MapPin,
   Building2,
   ChevronRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   MoreVertical,
   X,
   Plus,
+  Sparkles,
+  User,
+  UserCheck,
+  UserPlus,
+  UserX,
+  Check,
 } from "lucide-react";
 import { useGovStore } from "../store/govStore";
 import { GovProject, DltmProject, GovStage, DltmStage, Region } from "../types";
-import { GOV_STAGES, DLTM_STAGES, REGIONS } from "../constants";
+import { GOV_STAGES, DLTM_STAGES, REGIONS, IGB_TEAM_MEMBERS } from "../constants";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -28,18 +38,68 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { GovAddProvinceModal } from "./GovAddProvinceModal";
+import { ProjectAssigneeSelect } from "./ProjectAssigneeSelect";
+
+function getPageNumbers(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, "...", total];
+  }
+  if (current >= total - 3) {
+    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, "...", current - 1, current, current + 1, "...", total];
+}
 
 export function GovTableView() {
-  const { projects, filters, setFilters, resetFilters, setSelectedProject, activeSolutionId } = useGovStore();
+  const {
+    projects,
+    filters,
+    setFilters,
+    resetFilters,
+    setSelectedProject,
+    updateProjectAssignee,
+    initAllTargetProvinces,
+    activeSolutionId,
+    teamMembers,
+  } = useGovStore();
 
-  // Lọc danh sách tỉnh thành theo bộ lọc
+  const [addProvinceOpen, setAddProvinceOpen] = React.useState(false);
+
+  const handleInitAll = async () => {
+    if (
+      confirm(
+        "Bạn có chắc muốn khởi tạo toàn bộ 34 tỉnh thành mục tiêu quốc gia cho dự án này không?"
+      )
+    ) {
+      const res = await initAllTargetProvinces();
+      if (res.success) {
+        toast.success(`Đã khởi tạo thành công ${res.insertedCount || 34} tỉnh mục tiêu!`);
+      } else {
+        toast.error("Không thể khởi tạo các tỉnh. Vui lòng thử lại!");
+      }
+    }
+  };
+
+  const activeProjects = React.useMemo(() => {
+    return projects.filter((p) => !activeSolutionId || p.solutionId === activeSolutionId);
+  }, [projects, activeSolutionId]);
+
   const filteredProjects = React.useMemo(() => {
     return projects.filter((p) => {
-      // 0. Active Solution
-      if ((p.solutionId || "dltm") !== activeSolutionId) return false;
+      if (activeSolutionId && p.solutionId !== activeSolutionId) return false;
 
-      // 1. Search
       if (filters.search && filters.search.trim()) {
         const q = filters.search.toLowerCase().trim();
         const matchName = p.provinceName.toLowerCase().includes(q);
@@ -50,29 +110,43 @@ export function GovTableView() {
         if (!matchName && !matchCode && !matchLeader && !matchDept && !matchNotes) return false;
       }
 
-      // 2. Region
       if (filters.region && filters.region !== "ALL") {
         if (p.region !== filters.region) return false;
       }
 
-      // 3. Stage
       if (filters.stage && filters.stage !== "ALL") {
         if (p.stage !== filters.stage) return false;
       }
 
       return true;
     });
-  }, [projects, filters]);
+  }, [projects, filters, activeSolutionId]);
+
+  const [pageSize, setPageSize] = React.useState<number | "ALL">(10);
+  const [currentPage, setCurrentPage] = React.useState(1);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.search, filters.region, filters.stage, activeSolutionId, pageSize]);
+
+  const totalItems = filteredProjects.length;
+  const totalPages =
+    pageSize === "ALL" ? 1 : Math.max(1, Math.ceil(totalItems / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const paginatedProjects = React.useMemo(() => {
+    if (pageSize === "ALL") return filteredProjects;
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredProjects.slice(start, start + pageSize);
+  }, [filteredProjects, safeCurrentPage, pageSize]);
 
   const hasActiveFilters =
     Boolean(filters.search) || filters.region !== "ALL" || filters.stage !== "ALL";
 
   return (
     <div className="space-y-3.5">
-      {/* Search and Filters Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-card/80 backdrop-blur-md border border-border/80 shadow-2xs">
         <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
-          {/* Ô tìm kiếm */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -84,7 +158,6 @@ export function GovTableView() {
             />
           </div>
 
-          {/* Lọc theo Vùng miền */}
           <Select
             value={filters.region || "ALL"}
             onValueChange={(val) => setFilters({ region: val as Region | "ALL" })}
@@ -102,7 +175,6 @@ export function GovTableView() {
             </SelectContent>
           </Select>
 
-          {/* Lọc theo Trạng thái (Stage) */}
           <Select
             value={filters.stage || "ALL"}
             onValueChange={(val) => setFilters({ stage: val as DltmStage | "ALL" })}
@@ -133,13 +205,36 @@ export function GovTableView() {
           )}
         </div>
 
-        <div className="text-xs text-muted-foreground font-medium shrink-0">
-          Hiển thị <strong className="text-foreground">{filteredProjects.length}</strong> /{" "}
-          {projects.filter((p) => (p.solutionId || "dltm") === activeSolutionId).length} tỉnh thành
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <div className="text-xs text-muted-foreground font-medium">
+            Hiển thị <strong className="text-foreground">{filteredProjects.length}</strong> /{" "}
+            {activeProjects.length} tỉnh thành
+          </div>
+
+          {activeProjects.length < 34 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleInitAll}
+              className="h-8 px-2.5 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 transition-all font-medium"
+              title="Khởi tạo nhanh cả 34 tỉnh mục tiêu quốc gia"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Khởi tạo 34 tỉnh</span>
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            onClick={() => setAddProvinceOpen(true)}
+            className="h-8 px-3 text-xs gap-1.5 font-semibold bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Thêm tỉnh tiếp cận</span>
+          </Button>
         </div>
       </div>
 
-      {/* Main Table */}
       <div className="rounded-2xl border border-border/80 bg-card/90 backdrop-blur-md shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
@@ -153,18 +248,53 @@ export function GovTableView() {
                 <th className="py-3.5 px-4 min-w-[220px]">Lịch hẹn làm việc gần nhất</th>
                 <th className="py-3.5 px-4 min-w-[110px] text-center">Tài liệu & Task</th>
                 <th className="py-3.5 px-4 min-w-[150px]">Đầu mối IGB</th>
-                <th className="py-3.5 px-4 text-right">Chi tiết</th>
+                <th className="py-3.5 px-4 min-w-[120px]">Chi tiết</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
               {filteredProjects.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-muted-foreground">
-                    Không tìm thấy tỉnh thành nào phù hợp với bộ lọc.
+                    <div className="max-w-sm mx-auto space-y-3">
+                      <div className="w-10 h-10 rounded-2xl bg-muted/80 mx-auto flex items-center justify-center text-muted-foreground">
+                        <MapPin className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="text-xs font-semibold text-foreground">
+                        {hasActiveFilters
+                          ? "Không tìm thấy tỉnh thành nào phù hợp với bộ lọc."
+                          : "Dự án chưa có địa phương nào được tiếp cận."}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {hasActiveFilters
+                          ? "Thử thay đổi từ khóa tìm kiếm hoặc xóa các điều kiện lọc."
+                          : "Bắt đầu mở rộng quy trình tiếp cận hoặc khởi tạo nhanh 34 tỉnh mục tiêu."}
+                      </p>
+                      {!hasActiveFilters && (
+                        <div className="flex items-center justify-center gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            onClick={() => setAddProvinceOpen(true)}
+                            className="h-8 text-xs gap-1 font-semibold"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Thêm tỉnh tiếp cận
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleInitAll}
+                            className="h-8 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Khởi tạo 34 tỉnh
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
-                filteredProjects.map((project, idx) => {
+                paginatedProjects.map((project, idx) => {
                   const stageConfig = DLTM_STAGES[project.stage];
 
                   return (
@@ -173,34 +303,31 @@ export function GovTableView() {
                       onClick={() => setSelectedProject(project)}
                       className="hover:bg-muted/40 transition-colors cursor-pointer group"
                     >
-                      {/* STT */}
                       <td className="py-3 px-4 text-center font-mono text-muted-foreground">
-                        {idx + 1}
+                        {pageSize === "ALL"
+                          ? idx + 1
+                          : (safeCurrentPage - 1) * pageSize + idx + 1}
                       </td>
 
-                      {/* Tên tỉnh thành */}
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary font-bold flex items-center justify-center font-mono text-xs shrink-0 group-hover:scale-105 transition-transform">
-                            {project.code}
-                          </div>
-                          <div>
-                            <span className="font-bold text-sm text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
-                              {project.provinceName}
+                        <div>
+                          <span className="font-bold text-sm text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
+                            {project.provinceName}
+                          </span>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                            <span className="bg-muted px-1.5 py-0.2 rounded text-[10px] font-medium">
+                              {project.region}
                             </span>
-                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
-                              <span className="bg-muted px-1.5 py-0.2 rounded text-[10px] font-medium">
-                                {project.region}
-                              </span>
-                              <span className="truncate max-w-[140px]">
+                            {project.leaderContact.fullName && (
+                              <span className="truncate max-w-[140px] flex items-center gap-1">
+                                <User className="w-3 h-3 text-muted-foreground" />
                                 {project.leaderContact.fullName}
                               </span>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </td>
 
-                      {/* Giai đoạn / Trạng thái */}
                       <td className="py-3 px-4">
                         <Badge
                           variant="outline"
@@ -210,7 +337,6 @@ export function GovTableView() {
                         </Badge>
                       </td>
 
-                      {/* Tiến độ % */}
                       <td className="py-3 px-4">
                         <div className="space-y-1 max-w-[100px]">
                           <div className="flex items-center justify-between text-[11px] font-mono">
@@ -229,7 +355,6 @@ export function GovTableView() {
                         </div>
                       </td>
 
-                      {/* Ghi chú */}
                       <td className="py-3 px-4">
                         {project.notes ? (
                           <p className="text-[11px] text-muted-foreground line-clamp-2 max-w-[240px]" title={project.notes}>
@@ -240,7 +365,6 @@ export function GovTableView() {
                         )}
                       </td>
 
-                      {/* Lịch làm việc gần nhất */}
                       <td className="py-3 px-4">
                         {project.nextMeetingDate ? (
                           <div className="space-y-0.5">
@@ -259,7 +383,6 @@ export function GovTableView() {
                         )}
                       </td>
 
-                      {/* Tài liệu & Task */}
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-3 text-muted-foreground text-xs font-mono">
                           <span
@@ -279,22 +402,11 @@ export function GovTableView() {
                         </div>
                       </td>
 
-                      {/* Đầu mối IGB */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={project.igbAssignee.avatar}
-                            alt={project.igbAssignee.name}
-                            className="h-6 w-6 rounded-full object-cover shrink-0"
-                          />
-                          <span className="text-xs text-foreground font-medium truncate max-w-[120px]">
-                            {project.igbAssignee.name}
-                          </span>
-                        </div>
+                      <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                        <ProjectAssigneeSelect project={project} />
                       </td>
 
-                      {/* Action */}
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-4">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -311,10 +423,151 @@ export function GovTableView() {
             </tbody>
           </table>
         </div>
+
+        {/* Thanh điều khiển phân trang */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-border/60 bg-muted/20 text-xs">
+          {/* Thông tin số lượng hiển thị */}
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <span>
+              {totalItems === 0 ? (
+                "Không có dữ liệu"
+              ) : pageSize === "ALL" ? (
+                <>
+                  Hiển thị tất cả{" "}
+                  <strong className="text-foreground font-semibold font-mono">
+                    {totalItems}
+                  </strong>{" "}
+                  tỉnh thành
+                </>
+              ) : (
+                <>
+                  Hiển thị{" "}
+                  <strong className="text-foreground font-semibold font-mono">
+                    {(safeCurrentPage - 1) * pageSize + 1}
+                  </strong>
+                  –
+                  <strong className="text-foreground font-semibold font-mono">
+                    {Math.min(safeCurrentPage * pageSize, totalItems)}
+                  </strong>{" "}
+                  trên tổng số{" "}
+                  <strong className="text-foreground font-semibold font-mono">
+                    {totalItems}
+                  </strong>{" "}
+                  tỉnh thành
+                </>
+              )}
+            </span>
+          </div>
+
+          {/* Điều khiển phân trang & Tùy chọn số dòng mỗi trang */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="text-[11px]">Số dòng:</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(val) =>
+                  setPageSize(val === "ALL" ? "ALL" : Number(val))
+                }
+              >
+                <SelectTrigger className="h-7 w-[105px] text-xs bg-background/80 border-border/60">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 / trang</SelectItem>
+                  <SelectItem value="25">25 / trang</SelectItem>
+                  <SelectItem value="50">50 / trang</SelectItem>
+                  <SelectItem value="ALL">Tất cả</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {pageSize !== "ALL" && totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7 text-xs bg-background/80 border-border/60 cursor-pointer disabled:opacity-40"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage <= 1}
+                  title="Trang đầu"
+                >
+                  <ChevronsLeft className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7 text-xs bg-background/80 border-border/60 cursor-pointer disabled:opacity-40"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  title="Trang trước"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+
+                {/* Các nút số trang */}
+                <div className="flex items-center gap-1 px-1">
+                  {getPageNumbers(safeCurrentPage, totalPages).map((p, idx) =>
+                    p === "..." ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="px-1 text-muted-foreground/60 select-none text-[11px]"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <Button
+                        key={`page-${p}`}
+                        variant={safeCurrentPage === p ? "default" : "outline"}
+                        size="sm"
+                        className={cn(
+                          "h-7 min-w-7 px-2 text-xs font-mono transition-all cursor-pointer",
+                          safeCurrentPage === p
+                            ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                            : "bg-background/80 hover:bg-muted border-border/60 text-muted-foreground hover:text-foreground"
+                        )}
+                        onClick={() => setCurrentPage(Number(p))}
+                      >
+                        {p}
+                      </Button>
+                    )
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7 text-xs bg-background/80 border-border/60 cursor-pointer disabled:opacity-40"
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={safeCurrentPage >= totalPages}
+                  title="Trang sau"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7 text-xs bg-background/80 border-border/60 cursor-pointer disabled:opacity-40"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage >= totalPages}
+                  title="Trang cuối"
+                >
+                  <ChevronsRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      <GovAddProvinceModal
+        open={addProvinceOpen}
+        onOpenChange={setAddProvinceOpen}
+        onOpenInitAll={handleInitAll}
+      />
     </div>
   );
 }
 
 export const DltmTableView = GovTableView;
-

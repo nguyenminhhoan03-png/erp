@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useTaskStore } from "@/modules/tasks/store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { UserAvatar } from "@/shared/components/UserAvatar";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -22,7 +21,7 @@ import { toast } from "sonner";
 
 export default function ApprovalsPage() {
   const { tasks, fetchTasks, approveTask, rejectTask, openDetail } = useTaskStore();
-  const { currentUser, getUserById } = useUserStore();
+  const { currentUser, getUserById, departments } = useUserStore();
 
   React.useEffect(() => {
     fetchTasks();
@@ -91,7 +90,7 @@ export default function ApprovalsPage() {
         <div className="space-y-3">
           {pendingTasks.map((task) => {
             const creator = getUserById(task.creatorId);
-            const dept = MOCK_DEPARTMENTS.find((d) => d.id === task.departmentId);
+            const dept = departments.find((d) => d.id === task.departmentId);
 
             return (
               <div

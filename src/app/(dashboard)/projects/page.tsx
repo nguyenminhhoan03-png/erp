@@ -18,15 +18,18 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { useGovStore } from "@/modules/gov-solutions/store/govStore";
-import { DEFAULT_DIGITAL_SOLUTIONS } from "@/modules/gov-solutions/constants";
 
 export default function ProjectsPage() {
-  const { projects, solutions } = useGovStore();
+  const { projects, solutions, fetchInitial } = useGovStore();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState<"ALL" | "GOV" | "OUTSOURCE" | "INTERNAL">("ALL");
 
+  React.useEffect(() => {
+    fetchInitial();
+  }, [fetchInitial]);
+
   // Summary counts
-  const totalGovProvinces = 34;
+  const totalGovProvinces = projects.length || 34;
   const completedGovProjects = projects.filter((p) => p.stage === "COMPLETED").length;
   const deployingGovProjects = projects.filter((p) => p.stage === "DEPLOYING").length;
 
@@ -72,7 +75,7 @@ export default function ProjectsPage() {
               </span>
               <h3 className="text-lg font-bold text-foreground mt-3">Chuyển đổi số 34 Tỉnh/Thành</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Du lịch thông minh, Đất đai & GIS, Y tế số, Giáo dục số
+                {solutions.length > 0 ? solutions.map((s) => s.name).join(", ") : "Chuyển giao và triển khai giải pháp số cho các địa phương"}
               </p>
             </div>
             <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
@@ -96,7 +99,7 @@ export default function ProjectsPage() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">5 giải pháp trọng điểm</span>
+            <span className="text-xs text-muted-foreground">{solutions.length} giải pháp trọng điểm</span>
             <Link
               href="/gov-projects"
               className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
@@ -194,7 +197,7 @@ export default function ProjectsPage() {
               Các Giải Pháp Chuyển Đổi Số Chính Quyền (B2G Digital Solutions)
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              5 trụ cột giải pháp IGB đang tài trợ & chuyển giao cho 34 tỉnh thành cả nước
+              Các trụ cột giải pháp IGB đang tài trợ & chuyển giao cho các tỉnh thành cả nước
             </p>
           </div>
           <Link

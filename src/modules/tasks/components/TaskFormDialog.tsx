@@ -4,13 +4,22 @@ import * as React from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, addDays } from "date-fns";
-import { Calendar, Plus, Users, ShieldAlert, Sparkles, UserPlus, Clock, Briefcase } from "lucide-react";
+import {
+  Calendar,
+  Plus,
+  Users,
+  UserPlus,
+  Clock,
+  Briefcase,
+  Search,
+  Timer,
+  Check,
+  Building2,
+} from "lucide-react";
 import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
-import { REQUIRE_SELF_TASK_APPROVAL, TASK_PRIORITY_CONFIG, AVAILABLE_PROJECTS } from "../constants";
+import { REQUIRE_SELF_TASK_APPROVAL, TASK_PRIORITY_CONFIG } from "../constants";
 import { taskFormSchema, TaskFormValues } from "../schemas";
-import { DepartmentId, User } from "@/shared/types";
 import { TaskStatus } from "../types";
 import { UserFormDialog } from "@/shared/components/UserFormDialog";
 import { Checkbox } from "@/shared/components/ui/checkbox";
@@ -37,12 +46,15 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export function TaskFormDialog() {
-  const { isCreateOpen, closeCreate, createTask } = useTaskStore();
-  const { currentUser, users } = useUserStore();
+  const { isCreateOpen, closeCreate, createTask, projects } = useTaskStore();
+  const { currentUser, users, departments, fetchUsers, fetchDepartments } = useUserStore();
 
   const isEmployee = currentUser.role === "EMPLOYEE";
-  const defaultDueDate = format(addDays(new Date(), 3), "yyyy-MM-dd");
   const [isAddUserOpen, setIsAddUserOpen] = React.useState(false);
+  const [userSearchTerm, setUserSearchTerm] = React.useState("");
+  const wasOpenRef = React.useRef(false);
+
+  const initialDeptId = currentUser.departmentId ? String(currentUser.departmentId) : (departments[0]?.id ? String(departments[0]?.id) : "1");
 
   const {
     register,
@@ -58,10 +70,12 @@ export function TaskFormDialog() {
       title: "",
       description: "",
       projectId: "ERP_CORE",
-      departmentId: currentUser.departmentId,
+      departmentId: initialDeptId,
       priority: "MEDIUM",
       assigneeIds: isEmployee ? [currentUser.id] : [],
-      dueDate: defaultDueDate,
+      startDate: format(new Date(), "yyyy-MM-dd"),
+      dueDate: format(addDays(new Date(), 3), "yyyy-MM-dd"),
+      estimatedHours: undefined,
       tags: "",
       assignScope: "INDIVIDUAL",
       requiresApproval: isEmployee ? true : false,
@@ -72,31 +86,51 @@ export function TaskFormDialog() {
   const selectedAssigneeIds = watch("assigneeIds") || [];
   const assignScope = watch("assignScope");
 
-  // Reset form when dialog opens
   React.useEffect(() => {
-    if (isCreateOpen) {
+    if (isCreateOpen && !wasOpenRef.current) {
+      fetchUsers();
+      fetchDepartments();
+      const currentDeptId = currentUser.departmentId ? String(currentUser.departmentId) : (departments[0]?.id ? String(departments[0]?.id) : "1");
       reset({
         title: "",
         description: "",
         projectId: "ERP_CORE",
-        departmentId: currentUser.departmentId,
+        departmentId: currentDeptId,
         priority: "MEDIUM",
         assigneeIds: isEmployee ? [currentUser.id] : [],
-        dueDate: defaultDueDate,
+        startDate: format(new Date(), "yyyy-MM-dd"),
+        dueDate: format(addDays(new Date(), 3), "yyyy-MM-dd"),
+        estimatedHours: undefined,
         tags: "",
         assignScope: "INDIVIDUAL",
         requiresApproval: isEmployee ? true : false,
       });
+      setUserSearchTerm("");
     }
-  }, [isCreateOpen, currentUser, isEmployee, defaultDueDate, reset]);
+    wasOpenRef.current = isCreateOpen;
+  }, [isCreateOpen]);
 
-  // Lọc danh sách nhân viên thuộc phòng ban được chọn
-  const departmentUsers = React.useMemo(() => {
-    return users.filter((u) => u.departmentId === selectedDepartmentId);
-  }, [users, selectedDepartmentId]);
+  React.useEffect(() => {
+    setUserSearchTerm("");
+  }, [selectedDepartmentId]);
+
+  const displayUsers = React.useMemo(() => {
+    let list = !selectedDepartmentId
+      ? users
+      : users.filter((u) => String(u.departmentId) === String(selectedDepartmentId));
+
+    if (userSearchTerm.trim()) {
+      const q = userSearchTerm.toLowerCase().trim();
+      list = list.filter((u) =>
+        u.name.toLowerCase().includes(q) ||
+        (u.title && u.title.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [users, selectedDepartmentId, userSearchTerm]);
 
   const handleToggleAssignee = (userId: string) => {
-    if (isEmployee) return; // Nhân viên không được gán người khác
+    if (isEmployee) return;
     if (selectedAssigneeIds.includes(userId)) {
       setValue(
         "assigneeIds",
@@ -118,7 +152,7 @@ export function TaskFormDialog() {
       setValue("assignScope", "ALL_DEPARTMENT");
       setValue(
         "assigneeIds",
-        departmentUsers.map((u) => u.id),
+        displayUsers.map((u) => u.id),
         { shouldValidate: true }
       );
     }
@@ -126,9 +160,6 @@ export function TaskFormDialog() {
 
   const onSubmit = async (values: TaskFormValues) => {
     try {
-      // Xác định trạng thái ban đầu:
-      // - Nếu là Nhân viên: Tự động chuyển vào PENDING_APPROVAL theo quy trình duyệt nội bộ.
-      // - Nếu là Quản lý / Admin / Lead: Tùy theo lựa chọn requiresApproval (nếu muốn gửi duyệt cấp trên)
       const shouldRequireApproval = isEmployee
         ? REQUIRE_SELF_TASK_APPROVAL
         : Boolean(values.requiresApproval);
@@ -136,7 +167,6 @@ export function TaskFormDialog() {
       const initialStatus: TaskStatus = shouldRequireApproval ? "PENDING_APPROVAL" : "TODO";
       const requiresApproval = shouldRequireApproval;
 
-      // Xử lý tags
       const tagsList = values.tags
         ? values.tags
             .split(",")
@@ -144,7 +174,7 @@ export function TaskFormDialog() {
             .filter(Boolean)
         : [];
 
-      const selectedProj = AVAILABLE_PROJECTS.find((p) => p.id === values.projectId);
+      const selectedProj = projects.find((p) => p.id === values.projectId);
 
       await createTask({
         title: values.title,
@@ -156,7 +186,9 @@ export function TaskFormDialog() {
         priority: values.priority,
         creatorId: currentUser.id,
         assigneeIds: values.assigneeIds,
+        startDate: values.startDate ? new Date(values.startDate).toISOString() : undefined,
         dueDate: new Date(values.dueDate).toISOString(),
+        estimatedHours: values.estimatedHours,
         status: initialStatus,
         requiresApproval,
         isApproved: !requiresApproval,
@@ -175,7 +207,7 @@ export function TaskFormDialog() {
         });
       } else {
         toast.success("Tạo công việc thành công!", {
-          description: "Công việc đã được thêm vào cột 'Cần làm'.",
+          description: "Công việc đã được thêm vào danh sách.",
         });
       }
 
@@ -188,7 +220,6 @@ export function TaskFormDialog() {
   return (
     <Dialog open={isCreateOpen} onOpenChange={(open) => !open && closeCreate()}>
       <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-        {/* Header */}
         <div className="p-6 pb-4 border-b border-border/80 bg-muted/20 pr-12">
           <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
             <Plus className="h-5 w-5 text-primary" />
@@ -201,9 +232,15 @@ export function TaskFormDialog() {
           </p>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* Tiêu đề */}
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
+              e.preventDefault();
+            }
+          }}
+          className="flex-1 overflow-y-auto p-6 space-y-4"
+        >
           <div>
             <label className="text-xs font-semibold text-foreground mb-1 block">
               Tiêu đề công việc <span className="text-rose-500">*</span>
@@ -220,7 +257,6 @@ export function TaskFormDialog() {
             )}
           </div>
 
-          {/* Thuộc Dự án (Chuẩn Jira Multi-Project) */}
           <div>
             <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5">
               <Briefcase className="h-3.5 w-3.5 text-primary" />
@@ -238,24 +274,44 @@ export function TaskFormDialog() {
                     <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
                       Dự án Nội bộ
                     </div>
-                    {AVAILABLE_PROJECTS.filter((p) => p.category === "INTERNAL").map((proj) => (
+                    {projects.filter((p) => p.category === "INTERNAL").map((proj) => (
                       <SelectItem key={proj.id} value={proj.id}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400">[{proj.key}]</span>
-                          <span>{proj.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-14 shrink-0 text-left">
+                            {proj.code ? `[${proj.code}]` : ""}
+                          </span>
+                          <span className="truncate">{proj.name}</span>
                         </div>
                       </SelectItem>
                     ))}
-                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
-                      Dự án CĐS Tỉnh (Bước 6)
-                    </div>
-                    {AVAILABLE_PROJECTS.filter((p) => p.category === "GOV_SOLUTION").map((proj) => (
-                      <SelectItem key={proj.id} value={proj.id}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-orange-600 dark:text-orange-400">[{proj.key}]</span>
-                          <span>{proj.name}</span>
+                    {projects.filter((p) => p.category === "GOV_SOLUTION").length > 0 && (
+                      <div className="px-2 py-1 mt-1.5 mb-0.5 text-[11px] font-bold uppercase tracking-wider text-primary bg-primary/10 rounded-sm">
+                        Dự án Giải pháp CĐS Tỉnh (GOV)
+                      </div>
+                    )}
+                    {Object.entries(
+                      projects.filter((p) => p.category === "GOV_SOLUTION").reduce((acc, proj) => {
+                        const group = proj.groupName || "Chưa phân nhóm";
+                        if (!acc[group]) acc[group] = [];
+                        acc[group].push(proj);
+                        return acc;
+                      }, {} as Record<string, typeof projects>)
+                    ).map(([groupName, groupProjects]) => (
+                      <React.Fragment key={groupName}>
+                        <div className="px-3 py-1 ml-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30 border-l-2 border-primary/30">
+                          ↳ {groupName}
                         </div>
-                      </SelectItem>
+                        {groupProjects.map((proj) => (
+                          <SelectItem key={proj.id} value={proj.id} className="pl-7">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-orange-600 dark:text-orange-400 w-14 shrink-0 text-left">
+                                {proj.code ? `[${proj.code}]` : ""}
+                              </span>
+                              <span className="truncate">{proj.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </React.Fragment>
                     ))}
                   </SelectContent>
                 </Select>
@@ -263,9 +319,7 @@ export function TaskFormDialog() {
             />
           </div>
 
-          {/* Phòng ban & Mức độ ưu tiên */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Phòng ban */}
             <div>
               <label className="text-xs font-semibold text-foreground mb-1 block">
                 Phòng ban phụ trách <span className="text-rose-500">*</span>
@@ -280,14 +334,14 @@ export function TaskFormDialog() {
                       field.onChange(val);
                       if (!isEmployee) setValue("assigneeIds", []);
                     }}
-                    disabled={isEmployee} // Nhân viên chỉ tạo cho phòng mình
+                    disabled={isEmployee}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Chọn phòng ban" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MOCK_DEPARTMENTS.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={String(dept.id)}>
                           {dept.name}
                         </SelectItem>
                       ))}
@@ -295,9 +349,13 @@ export function TaskFormDialog() {
                   </Select>
                 )}
               />
+              {errors.departmentId && (
+                <span className="text-[11px] text-rose-500 mt-1 block font-medium">
+                  {errors.departmentId.message}
+                </span>
+              )}
             </div>
 
-            {/* Độ ưu tiên */}
             <div>
               <label className="text-xs font-semibold text-foreground mb-1 block">
                 Mức độ ưu tiên <span className="text-rose-500">*</span>
@@ -323,11 +381,16 @@ export function TaskFormDialog() {
             </div>
           </div>
 
-          {/* Người thực hiện (Assignees) */}
           <div>
             <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-              <label className="text-xs font-semibold text-foreground">
-                Người thực hiện <span className="text-rose-500">*</span>
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-primary" />
+                <span>Người thực hiện <span className="text-rose-500">*</span></span>
+                {selectedAssigneeIds.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] h-4 font-normal px-1.5">
+                    Đã chọn {selectedAssigneeIds.length}
+                  </Badge>
+                )}
               </label>
               {!isEmployee && (
                 <div className="flex items-center gap-2.5">
@@ -339,13 +402,13 @@ export function TaskFormDialog() {
                     <UserPlus className="h-3 w-3" />
                     <span>+ Thêm nhân sự</span>
                   </button>
-                  {departmentUsers.length > 0 && (
+                  {displayUsers.length > 0 && (
                     <button
                       type="button"
                       onClick={handleSelectAllDepartment}
                       className="text-xs text-muted-foreground hover:text-foreground hover:underline font-medium cursor-pointer"
                     >
-                      {assignScope === "ALL_DEPARTMENT" ? "Bỏ chọn tất cả" : "Giao cho cả phòng"}
+                      {assignScope === "ALL_DEPARTMENT" ? "Bỏ chọn tất cả" : "Chọn tất cả"}
                     </button>
                   )}
                 </div>
@@ -362,31 +425,57 @@ export function TaskFormDialog() {
               </div>
             ) : (
               <div className="space-y-2">
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Tìm theo tên hoặc vị trí..."
+                    value={userSearchTerm}
+                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                    className="h-8 pl-8 text-xs w-full"
+                  />
+                </div>
+
                 <div className="max-h-36 overflow-y-auto rounded-lg border border-border/80 p-2 space-y-1 bg-card">
-                  {departmentUsers.map((u) => {
-                    const isSelected = selectedAssigneeIds.includes(u.id);
-                    return (
-                      <div
-                        key={u.id}
-                        onClick={() => handleToggleAssignee(u.id)}
-                        className={cn(
-                          "flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors text-xs select-none",
-                          isSelected
-                            ? "bg-primary/10 text-primary font-semibold border border-primary/20"
-                            : "hover:bg-muted/60 text-foreground"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <UserAvatar user={u} size="sm" />
-                          <span>{u.name}</span>
-                          <span className="text-[11px] text-muted-foreground font-normal">
-                            ({u.title})
-                          </span>
+                  {displayUsers.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-1">
+                      <Users className="h-6 w-6 text-muted-foreground/40 mb-1" />
+                      <span>
+                        {userSearchTerm.trim()
+                          ? "Không tìm thấy nhân sự phù hợp."
+                          : "Chưa có nhân sự nào thuộc phòng ban này."}
+                      </span>
+                    </div>
+                  ) : (
+                    displayUsers.map((u) => {
+                      const isSelected = selectedAssigneeIds.includes(u.id);
+                      return (
+                        <div
+                          key={u.id}
+                          onClick={() => handleToggleAssignee(u.id)}
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors text-xs select-none",
+                            isSelected
+                              ? "bg-primary/10 text-primary font-semibold border border-primary/20"
+                              : "hover:bg-muted/60 text-foreground"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <UserAvatar user={u} size="sm" />
+                            <span>{u.name}</span>
+                            <span className="text-[11px] text-muted-foreground font-normal">
+                              ({u.title})
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <Badge variant="default" className="text-[10px] h-4 gap-1 px-1.5">
+                              <Check className="h-2.5 w-2.5" />
+                              <span>Đã chọn</span>
+                            </Badge>
+                          )}
                         </div>
-                        {isSelected && <Badge variant="default" className="text-[10px] h-4">Đã chọn</Badge>}
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}
@@ -397,11 +486,22 @@ export function TaskFormDialog() {
             )}
           </div>
 
-          {/* Hạn hoàn thành & Tags */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="text-xs font-semibold text-foreground mb-1 block">
-                Hạn hoàn thành (Deadline) <span className="text-rose-500">*</span>
+              <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-primary" />
+                <span>Thời gian bắt đầu</span>
+              </label>
+              <Input
+                type="date"
+                {...register("startDate")}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-rose-500" />
+                <span>Hạn hoàn thành (Deadline) <span className="text-rose-500">*</span></span>
               </label>
               <Input
                 type="date"
@@ -413,6 +513,25 @@ export function TaskFormDialog() {
                   {errors.dueDate.message}
                 </span>
               )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5">
+                <Timer className="h-3.5 w-3.5 text-primary" />
+                <span>Thời gian ước tính (Giờ)</span>
+              </label>
+              <Input
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="Ví dụ: 8 hoặc 16.5..."
+                {...register("estimatedHours", { valueAsNumber: true })}
+              />
+              <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                Số giờ dự kiến để hoàn thành
+              </span>
             </div>
 
             <div>
@@ -429,7 +548,6 @@ export function TaskFormDialog() {
             </div>
           </div>
 
-          {/* Mô tả chi tiết */}
           <div>
             <label className="text-xs font-semibold text-foreground mb-1 block">
               Mô tả chi tiết <span className="text-rose-500">*</span>
@@ -447,7 +565,6 @@ export function TaskFormDialog() {
             )}
           </div>
 
-          {/* Quy trình phê duyệt (Approval option) */}
           {isEmployee ? (
             <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/60 dark:bg-amber-950/20 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
               <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -493,7 +610,6 @@ export function TaskFormDialog() {
         </form>
       </DialogContent>
 
-      {/* Dialog thêm nhanh nhân sự mới */}
       <UserFormDialog
         open={isAddUserOpen}
         onOpenChange={setIsAddUserOpen}

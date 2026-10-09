@@ -1,4 +1,4 @@
-export type DepartmentId = "it" | "marketing" | "hr" | "sales" | "accounting";
+export type DepartmentId = "it" | "marketing" | "hr" | "sales" | "accounting" | (string & {});
 
 export interface Department {
   id: DepartmentId;

@@ -10,8 +10,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { Task } from "../types";
-import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG, AVAILABLE_PROJECTS } from "../constants";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
+import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG } from "../constants";
+import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { UserAvatar } from "@/shared/components/UserAvatar";
 import { Badge } from "@/shared/components/ui/badge";
@@ -25,7 +25,8 @@ interface TaskListViewProps {
 }
 
 export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
-  const { getUserById } = useUserStore();
+  const { getUserById, departments } = useUserStore();
+  const { projects } = useTaskStore();
 
   return (
     <div className="rounded-2xl border border-border/80 bg-card overflow-hidden shadow-2xs">
@@ -48,8 +49,8 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
             {tasks.map((task) => {
               const statusCfg = TASK_STATUS_CONFIG[task.status];
               const priorityCfg = TASK_PRIORITY_CONFIG[task.priority];
-              const dept = MOCK_DEPARTMENTS.find((d) => d.id === task.departmentId);
-              const project = AVAILABLE_PROJECTS.find((p) => p.id === task.projectId);
+              const dept = departments.find((d) => d.id === task.departmentId);
+              const project = projects.find((p) => p.id === task.projectId);
               const overdue = isOverdue(task.dueDate, task.status);
               const assignees = task.assigneeIds
                 .map((id) => getUserById(id))
@@ -71,12 +72,13 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     {project ? (
                       <Badge
                         variant="outline"
-                        className={cn("text-[10px] font-semibold", project.badgeBg, project.badgeText)}
+                        className={cn("text-[10px] font-semibold max-w-[200px] truncate block text-center", project.badgeBg, project.badgeText)}
+                        title={project.name}
                       >
-                        {project.category === "GOV_SOLUTION" ? `🏛️ ${project.key}` : project.key}
+                        {project.code ? project.code : project.name}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground text-xs font-mono">ERP</span>
+                      <span className="text-muted-foreground text-xs font-mono">-</span>
                     )}
                   </td>
 

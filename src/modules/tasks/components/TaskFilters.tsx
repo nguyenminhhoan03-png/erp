@@ -10,11 +10,11 @@ import {
   Plus,
   UserCheck,
   Briefcase,
+  Workflow,
 } from "lucide-react";
 import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
-import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, AVAILABLE_PROJECTS } from "../constants";
+import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from "../constants";
 import { TaskPriority, TaskStatus } from "../types";
 import { DepartmentId } from "@/shared/types";
 import { Input } from "@/shared/components/ui/input";
@@ -29,12 +29,40 @@ import {
 import { cn } from "@/lib/utils";
 
 export function TaskFilters() {
-  const { filters, setFilters, resetFilters, viewMode, setViewMode, openCreate } =
-    useTaskStore();
-  const { currentUser, users } = useUserStore();
+  const {
+    filters,
+    setFilters,
+    resetFilters,
+    viewMode,
+    setViewMode,
+    openCreate,
+    openWorkflowConfig,
+    projects,
+  } = useTaskStore();
+  const { currentUser, users, departments, fetchUsers, fetchDepartments } = useUserStore();
+
+  React.useEffect(() => {
+    fetchUsers();
+    fetchDepartments();
+  }, []);
+
+  const [searchTerm, setSearchTerm] = React.useState(filters.search || "");
+
+  React.useEffect(() => {
+    setSearchTerm(filters.search || "");
+  }, [filters.search]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm !== (filters.search || "")) {
+        setFilters({ search: searchTerm });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm, filters.search, setFilters]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters({ search: e.target.value });
+    setSearchTerm(e.target.value);
   };
 
   const handleToggleMyTasks = () => {
@@ -63,7 +91,7 @@ export function TaskFilters() {
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Tìm kiếm theo mã (ERP-...), tiêu đề..."
-              value={filters.search || ""}
+              value={searchTerm}
               onChange={handleSearchChange}
               className="pl-9 h-10 bg-card/60 rounded-xl"
             />
@@ -112,6 +140,20 @@ export function TaskFilters() {
             </button>
           </div>
 
+          {/* Workflow Config Button */}
+          {viewMode === "kanban" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openWorkflowConfig}
+              className="h-9 rounded-xl gap-1.5 border-border/80 hover:bg-muted/60"
+              title="Cấu hình quy trình & cột Kanban chuẩn Jira"
+            >
+              <Workflow className="h-4 w-4 text-primary" />
+              <span className="hidden lg:inline">Cấu hình Cột</span>
+            </Button>
+          )}
+
           {/* Create Task Button */}
           <Button
             onClick={openCreate}
@@ -138,7 +180,7 @@ export function TaskFilters() {
                 <SelectValue placeholder="Dự án">
                   {!filters.projectId || filters.projectId === "ALL"
                     ? "Tất cả dự án"
-                    : AVAILABLE_PROJECTS.find((p) => p.id === filters.projectId)?.name}
+                    : projects.find((p) => p.id === filters.projectId)?.name}
                 </SelectValue>
               </div>
             </SelectTrigger>
@@ -151,28 +193,44 @@ export function TaskFilters() {
               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
                 Dự án Nội bộ
               </div>
-              {AVAILABLE_PROJECTS.filter((p) => p.category === "INTERNAL").map((proj) => (
+              {projects.filter((p) => p.category === "INTERNAL").map((proj) => (
                 <SelectItem key={proj.id} value={proj.id}>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[11px] font-bold text-blue-600 dark:text-blue-400">
-                      [{proj.key}]
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] font-bold text-blue-600 dark:text-blue-400 w-14 shrink-0 text-left">
+                      {proj.code ? `[${proj.code}]` : ''}
                     </span>
-                    <span>{proj.name}</span>
+                    <span className="truncate">{proj.name}</span>
                   </div>
                 </SelectItem>
               ))}
-              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
-                Dự án CĐS Tỉnh (Bước 6)
-              </div>
-              {AVAILABLE_PROJECTS.filter((p) => p.category === "GOV_SOLUTION").map((proj) => (
-                <SelectItem key={proj.id} value={proj.id}>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[11px] font-bold text-orange-600 dark:text-orange-400">
-                      [{proj.key}]
-                    </span>
-                    <span>{proj.name}</span>
+              {projects.filter((p) => p.category === "GOV_SOLUTION").length > 0 && (
+                <div className="px-2 py-1 mt-1.5 mb-0.5 text-[11px] font-bold uppercase tracking-wider text-primary bg-primary/10 rounded-sm">
+                  Dự án Giải pháp CĐS Tỉnh (GOV)
+                </div>
+              )}
+              {Object.entries(
+                projects.filter((p) => p.category === "GOV_SOLUTION").reduce((acc, proj) => {
+                  const group = proj.groupName || 'Chưa phân nhóm';
+                  if (!acc[group]) acc[group] = [];
+                  acc[group].push(proj);
+                  return acc;
+                }, {} as Record<string, typeof projects>)
+              ).map(([groupName, groupProjects]) => (
+                <React.Fragment key={groupName}>
+                  <div className="px-3 py-1 ml-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/30 border-l-2 border-primary/30">
+                    ↳ {groupName}
                   </div>
-                </SelectItem>
+                  {groupProjects.map((proj) => (
+                    <SelectItem key={proj.id} value={proj.id} className="pl-7">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] font-bold text-orange-600 dark:text-orange-400 w-14 shrink-0 text-left">
+                          {proj.code ? `[${proj.code}]` : ''}
+                        </span>
+                        <span className="truncate">{proj.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </React.Fragment>
               ))}
             </SelectContent>
           </Select>
@@ -190,14 +248,14 @@ export function TaskFilters() {
               <SelectValue placeholder="Phòng ban">
                 {!filters.departmentId || filters.departmentId === "ALL"
                   ? "Tất cả phòng ban"
-                  : MOCK_DEPARTMENTS.find((d) => d.id === filters.departmentId)?.name}
+                  : departments.find((d) => d.id === filters.departmentId)?.name}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Tất cả phòng ban</SelectItem>
-              {MOCK_DEPARTMENTS.map((dept) => (
+              {departments.map((dept) => (
                 <SelectItem key={dept.id} value={dept.id}>
-                  {dept.code} - {dept.name}
+                  {dept.code ? `${dept.code} - ` : ''}{dept.name}
                 </SelectItem>
               ))}
             </SelectContent>

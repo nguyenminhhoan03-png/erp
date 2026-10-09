@@ -6,78 +6,408 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/shared/components/ui/dropdown-menu";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import { useGovStore } from "../store/govStore";
-import { GovWorkLog, DltmWorkLog } from "../types";
+import { GovLogType, DltmWorkLog, GovWorkLog } from "../types";
+import { GOV_LOG_TYPES, STAGE_OPTIONS } from "../constants";
+import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
-import { BookOpen, Calendar } from "lucide-react";
+import {
+  BookOpen,
+  CalendarPlus,
+  Send,
+  Inbox,
+  PhoneCall,
+  Users,
+  FileSignature,
+  FolderDown,
+  Wrench,
+  CheckCircle2,
+  Milestone,
+  Loader2,
+  X,
+  Paperclip,
+  UploadCloud,
+  FileText,
+  MapPin,
+  Pencil,
+  Sparkles,
+} from "lucide-react";
 
 export interface GovLogDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
   provinceName: string;
+  editingLog?: GovWorkLog | null;
 }
 export type DltmLogDialogProps = GovLogDialogProps;
+
+const LOG_TYPE_ICONS: Record<GovLogType, React.ReactNode> = {
+  DISPATCH_SENT: <Send className="h-3.5 w-3.5 text-blue-500" />,
+  DISPATCH_RECEIVED: <Inbox className="h-3.5 w-3.5 text-amber-500" />,
+  CALL: <PhoneCall className="h-3.5 w-3.5 text-purple-500" />,
+  MEETING: <Users className="h-3.5 w-3.5 text-emerald-500" />,
+  MOU_SIGNING: <FileSignature className="h-3.5 w-3.5 text-indigo-500" />,
+  DATA_COLLECT: <FolderDown className="h-3.5 w-3.5 text-cyan-500" />,
+  TECHNICAL: <Wrench className="h-3.5 w-3.5 text-orange-500" />,
+  ACCEPTANCE: <CheckCircle2 className="h-3.5 w-3.5 text-teal-500" />,
+  STAGE_CHANGE: <Milestone className="h-3.5 w-3.5 text-slate-500" />,
+};
+
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getDefaultNextMeetingDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  d.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 export function GovLogDialog({
   open,
   onOpenChange,
   projectId,
   provinceName,
+  editingLog,
 }: GovLogDialogProps) {
-  const { addWorkLog } = useGovStore();
+  const { projects, addWorkLog, updateWorkLog, teamMembers } = useGovStore();
+  const currentProject = projects.find((p) => p.id === projectId);
+  const leaders = React.useMemo(
+    () => (teamMembers || []).filter((u: any) => u.id !== "unassigned"),
+    [teamMembers]
+  );
 
-  const todayStr = new Date().toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+  const isEditing = Boolean(editingLog);
+  const todayStr = new Date().toISOString().slice(0, 16);
+
   const [meetingDate, setMeetingDate] = React.useState(todayStr);
+  const [stageId, setStageId] = React.useState<number>(1);
+  const [logType, setLogType] = React.useState<GovLogType>("MEETING");
+  const [title, setTitle] = React.useState("");
   const [meetingType, setMeetingType] = React.useState<DltmWorkLog["meetingType"]>("TRUC_TIEP");
+  const [location, setLocation] = React.useState("");
   const [participants, setParticipants] = React.useState("");
+  const [picName, setPicName] = React.useState("");
   const [content, setContent] = React.useState("");
   const [agreements, setAgreements] = React.useState("");
   const [nextSteps, setNextSteps] = React.useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Attachments
+  const [attachments, setAttachments] = React.useState<
+    Array<{ name: string; url: string; size?: number; type?: string }>
+  >([]);
+  const [isUploadingFile, setIsUploadingFile] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Next meeting follow-up
+  const [isCreateNextMeeting, setIsCreateNextMeeting] = React.useState(false);
+  const [nextMeetingDate, setNextMeetingDate] = React.useState(getDefaultNextMeetingDate());
+  const [nextMeetingTitle, setNextMeetingTitle] = React.useState("");
+  const [nextMeetingType, setNextMeetingType] = React.useState<DltmWorkLog["meetingType"]>("TRUC_TIEP");
+  const [nextMeetingLocation, setNextMeetingLocation] = React.useState("");
+  const [participantIds, setParticipantIds] = React.useState<string[]>([]);
+  const [searchParticipant, setSearchParticipant] = React.useState("");
+  const [durationMinutes, setDurationMinutes] = React.useState<number>(60);
+
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      if (editingLog) {
+        setStageId(editingLog.stageId || 1);
+        setLogType(editingLog.logType || "MEETING");
+        setTitle(editingLog.title || "");
+        setMeetingDate(
+          editingLog.meetingDate ? editingLog.meetingDate.replace(" ", "T").slice(0, 16) : todayStr
+        );
+        setMeetingType(editingLog.meetingType || "TRUC_TIEP");
+        setLocation(editingLog.location || "");
+        setParticipants(editingLog.participants || "");
+        setPicName(editingLog.recordedBy || "");
+        setContent(editingLog.content || "");
+        setAgreements(editingLog.agreements || "");
+        setNextSteps(editingLog.nextSteps || "");
+        setAttachments(editingLog.attachments || []);
+        setIsCreateNextMeeting(false);
+      } else if (currentProject) {
+        const stageMap: Record<string, number> = {
+          DISPATCHED: 1,
+          FEEDBACK: 2,
+          MOU_SIGNED: 3,
+          SPONSOR_AGREED: 4,
+          DATA_COLLECT: 5,
+          DEPLOYING: 6,
+          COMPLETED: 7,
+        };
+        const initialStage = stageMap[currentProject.stage] || 1;
+        setStageId(initialStage);
+        setLogType("MEETING");
+        setTitle(GOV_LOG_TYPES["MEETING"].defaultTitle);
+        setMeetingDate(todayStr);
+        setMeetingType("TRUC_TIEP");
+        setLocation(`Trụ sở UBND / Sở - ${provinceName}`);
+
+        if (currentProject.leaderContact?.fullName) {
+          setParticipants(`${currentProject.leaderContact.fullName} - ${currentProject.leaderContact.position}`);
+        } else {
+          setParticipants("");
+        }
+
+        if (currentProject.igbAssignee?.name) {
+          setPicName(currentProject.igbAssignee.name);
+        } else {
+          setPicName("");
+        }
+
+        setContent("");
+        setAgreements("");
+        setNextSteps("");
+        setAttachments([]);
+        setIsCreateNextMeeting(false);
+        setNextMeetingDate(getDefaultNextMeetingDate());
+        setNextMeetingTitle(`Buổi làm việc tiếp theo - ${provinceName}`);
+        setNextMeetingType("TRUC_TIEP");
+        setNextMeetingLocation(`Trụ sở UBND / Sở - ${provinceName}`);
+        setParticipantIds([]);
+      }
+    }
+  }, [open, editingLog, currentProject, provinceName, todayStr]);
+
+  const handleLogTypeChange = (newType: GovLogType) => {
+    setLogType(newType);
+    const config = GOV_LOG_TYPES[newType];
+    if (config && !isEditing) {
+      setTitle(config.defaultTitle);
+      if (config.suggestedStageId) {
+        setStageId(config.suggestedStageId);
+      }
+    }
+    if (newType === "MEETING") {
+      setMeetingType("TRUC_TIEP");
+    } else if (newType === "CALL") {
+      setMeetingType("DIEN_THOAI");
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingFile(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("folder", "gov-work-logs");
+
+        const res = await apiRequest<{
+          success: boolean;
+          message?: string;
+          data: {
+            url: string;
+            file_name?: string;
+            original_name?: string;
+            file_size?: number;
+            size?: number;
+            mime_type?: string;
+          };
+        }>("/erp/gov-projects/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res?.data?.url) {
+          const newAtt = {
+            name: res.data.file_name || res.data.original_name || file.name,
+            url: res.data.url,
+            size: res.data.file_size || res.data.size || file.size,
+            type: res.data.mime_type || file.type,
+          };
+          setAttachments((prev) => [...prev, newAtt]);
+          toast.success(`Đã tải lên tệp: ${file.name}`);
+        }
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Lỗi khi tải tệp lên máy chủ");
+    } finally {
+      setIsUploadingFile(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleRemoveAttachment = (indexToRemove: number) => {
+    setAttachments((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) {
-      toast.error("Vui lòng nhập nội dung buổi làm việc");
+      toast.error("Vui lòng nhập nội dung chi tiết");
       return;
     }
 
-    addWorkLog({
-      projectId,
-      meetingDate: meetingDate.replace("T", " "),
-      meetingType,
-      participants: participants.trim() || `Lãnh đạo địa phương + Đội ngũ IGB`,
-      content: content.trim(),
-      agreements: agreements.trim(),
-      nextSteps: nextSteps.trim(),
-      recordedBy: "Lê Văn Cường (Trưởng phòng IT)",
-    });
+    setIsSubmitting(true);
+    try {
+      if (isEditing && editingLog) {
+        const ok = await updateWorkLog(editingLog.id, {
+          stage_id: stageId,
+          log_type: logType,
+          title: title.trim() || GOV_LOG_TYPES[logType].defaultTitle,
+          meeting_date: meetingDate.replace("T", " "),
+          meeting_type: meetingType,
+          location: location.trim() || undefined,
+          participants: participants.trim() || "Đại diện Tỉnh",
+          content: content.trim(),
+          agreements: agreements.trim() || undefined,
+          next_steps: nextSteps.trim() || undefined,
+          attachments,
+          recorded_by: picName.trim() || "IGB Representative",
+        });
 
-    toast.success("Đã ghi nhận nhật ký làm việc!", {
-      description: `Lịch sử làm việc với tỉnh ${provinceName} đã được cập nhật.`,
-    });
+        if (ok) {
+          toast.success(`Đã cập nhật nhật ký làm việc thành công!`);
+          onOpenChange(false);
+        } else {
+          toast.error("Không thể cập nhật nhật ký, vui lòng thử lại");
+        }
+      } else {
+        const ok = await addWorkLog({
+          projectId,
+          solutionId: currentProject?.solutionId,
+          stageId,
+          logType,
+          title: title.trim() || GOV_LOG_TYPES[logType].defaultTitle,
+          meetingDate: meetingDate.replace("T", " "),
+          meetingType,
+          location: location.trim() || undefined,
+          participants: participants.trim() || "Đại diện Tỉnh",
+          content: content.trim(),
+          agreements: agreements.trim() || undefined,
+          nextSteps: nextSteps.trim() || undefined,
+          attachments,
+          recordedBy: picName.trim() || "IGB Representative",
+          createNextMeeting: isCreateNextMeeting,
+          nextMeetingDate: isCreateNextMeeting ? nextMeetingDate.replace("T", " ") : undefined,
+          nextMeetingTitle: isCreateNextMeeting
+            ? nextMeetingTitle.trim() || `Buổi làm việc tiếp theo - ${provinceName}`
+            : undefined,
+          nextMeetingType: isCreateNextMeeting ? nextMeetingType : undefined,
+          nextMeetingLocation: isCreateNextMeeting ? nextMeetingLocation.trim() || location : undefined,
+          participantIds: isCreateNextMeeting ? participantIds : undefined,
+          durationMinutes: isCreateNextMeeting ? durationMinutes : undefined,
+        });
 
-    setContent("");
-    setAgreements("");
-    setNextSteps("");
-    onOpenChange(false);
+        if (ok) {
+          toast.success(
+            isCreateNextMeeting
+              ? `Đã lưu nhật ký và lên lịch hẹn tiếp theo cho ${provinceName}!`
+              : `Đã ghi nhận nhật ký làm việc thành công với ${provinceName}`
+          );
+          onOpenChange(false);
+        } else {
+          toast.error("Không thể lưu nhật ký, vui lòng thử lại");
+        }
+      }
+    } catch {
+      toast.error("Có lỗi xảy ra khi lưu nhật ký");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base font-bold flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-primary" />
-            <span>Ghi nhận Nhật ký làm việc - {provinceName}</span>
+            {isEditing ? (
+              <Pencil className="h-5 w-5 text-amber-500" />
+            ) : (
+              <BookOpen className="h-5 w-5 text-primary" />
+            )}
+            <span>
+              {isEditing
+                ? `Chỉnh sửa Nhật ký làm việc - ${provinceName}`
+                : `Ghi nhận Nhật ký làm việc - ${provinceName}`}
+            </span>
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 pt-2">
-          {/* Ngày giờ & Hình thức */}
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="space-y-3.5 pt-1">
+          {/* Giai đoạn & Loại sự vụ */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Thời gian làm việc</label>
+              <label className="text-xs font-semibold text-foreground">
+                Khâu vòng đời dự án <span className="text-destructive">*</span>
+              </label>
+              <Select
+                value={String(stageId)}
+                onValueChange={(val) => setStageId(Number(val))}
+              >
+                <SelectTrigger className="text-xs h-9">
+                  <SelectValue placeholder="Chọn khâu" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAGE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.id} value={String(opt.id)} className="text-xs">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">
+                Loại sự vụ / Hành động <span className="text-destructive">*</span>
+              </label>
+              <Select
+                value={logType}
+                onValueChange={(val) => handleLogTypeChange(val as GovLogType)}
+              >
+                <SelectTrigger className="text-xs h-9">
+                  <SelectValue placeholder="Loại sự vụ" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(GOV_LOG_TYPES).map(([key, config]) => (
+                    <SelectItem key={key} value={key} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        {LOG_TYPE_ICONS[key as GovLogType]}
+                        <span>{config.label}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Tiêu đề sự vụ */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-foreground">Tiêu đề sự vụ</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="VD: Gửi công văn số 12/IGB-CV, Họp trao đổi tiến độ..."
+              className="text-xs h-9"
+            />
+          </div>
+
+          {/* Thời gian thực hiện & Hình thức */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Thời gian thực hiện</label>
               <Input
                 type="datetime-local"
                 value={meetingDate}
@@ -88,7 +418,7 @@ export function GovLogDialog({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Hình thức</label>
+              <label className="text-xs font-semibold text-foreground">Hình thức làm việc</label>
               <Select
                 value={meetingType}
                 onValueChange={(val) => setMeetingType(val as DltmWorkLog["meetingType"])}
@@ -111,65 +441,418 @@ export function GovLogDialog({
             </div>
           </div>
 
-          {/* Thành phần tham gia */}
+          {/* Đại diện Tỉnh & Nhân sự IGB */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Đại diện Tỉnh / Sở</label>
+              <Input
+                placeholder="VD: Giám đốc Sở, Chánh VP Sở TT&TT / Du lịch"
+                value={participants}
+                onChange={(e) => setParticipants(e.target.value)}
+                className="text-xs h-9"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Nhân sự IGB phụ trách</label>
+              <Select
+                value={picName}
+                onValueChange={(val) => setPicName(val)}
+              >
+                <SelectTrigger className="text-xs h-9">
+                  <SelectValue placeholder="Chọn nhân sự" />
+                </SelectTrigger>
+                <SelectContent>
+                  {leaders.map((user: any) => (
+                    <SelectItem key={user.id} value={user.name} className="text-xs">
+                      {user.name} ({user.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Địa điểm / Địa chỉ */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Thành phần tham gia</label>
+            <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+              <MapPin className="h-3 w-3 text-muted-foreground" />
+              <span>Địa điểm / Địa chỉ làm việc</span>
+            </label>
             <Input
-              placeholder="VD: Giám đốc Sở, Chánh VP Sở Du lịch + Đoàn IGB (Mr. Đăng, Mr. Cường)"
-              value={participants}
-              onChange={(e) => setParticipants(e.target.value)}
+              placeholder="VD: Trụ sở UBND Tỉnh, Văn phòng Sở Du lịch, Google Meet link..."
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
               className="text-xs h-9"
             />
           </div>
 
-          {/* Nội dung làm việc */}
+          {/* Nội dung chi tiết */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground">
-              Nội dung buổi làm việc <span className="text-destructive">*</span>
+              Nội dung chi tiết buổi làm việc <span className="text-destructive">*</span>
             </label>
             <Textarea
-              placeholder="Chi tiết các nội dung đã trình bày, khảo sát, trao đổi yêu cầu số hóa du lịch..."
+              placeholder="Chi tiết các nội dung đã trình bày, khảo sát, trao đổi yêu cầu số hóa, số công văn đã trao đổi..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="text-xs min-h-[80px] resize-none"
+              className="text-xs min-h-[85px] leading-relaxed resize-y"
               required
             />
           </div>
 
-          {/* Thỏa thuận đạt được */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Kết quả / Thỏa thuận đạt được</label>
-            <Textarea
-              placeholder="VD: Hai bên thống nhất ký MOU vào ngày 15 tới, Sở giao phòng CNTT làm đầu mối..."
-              value={agreements}
-              onChange={(e) => setAgreements(e.target.value)}
-              className="text-xs min-h-[60px] resize-none"
-            />
+          {/* Kết quả & Bước tiếp theo */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">
+                Kết quả / Thỏa thuận đạt được
+              </label>
+              <Textarea
+                placeholder="VD: Hai bên thống nhất ký MOU vào ngày 15 tới..."
+                value={agreements}
+                onChange={(e) => setAgreements(e.target.value)}
+                className="text-xs min-h-[60px] resize-y"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">
+                Các bước tiếp theo (Next Steps)
+              </label>
+              <Textarea
+                placeholder="VD: Gửi dự thảo quyết định tiếp nhận tài trợ; Phối hợp kỹ thuật..."
+                value={nextSteps}
+                onChange={(e) => setNextSteps(e.target.value)}
+                className="text-xs min-h-[60px] resize-y"
+              />
+            </div>
           </div>
 
-          {/* Kế hoạch tiếp theo */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Các bước tiếp theo (Next Steps)</label>
-            <Input
-              placeholder="VD: Gửi dự thảo quyết định tiếp nhận tài trợ trước ngày 20"
-              value={nextSteps}
-              onChange={(e) => setNextSteps(e.target.value)}
-              className="text-xs h-9"
-            />
+          {/* Ô UPLOAD BẰNG CHỨNG / TỆP ĐÍNH KÈM / ẢNH CUỘC HỌP */}
+          <div className="p-3 rounded-xl border border-border/80 bg-muted/20 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5 text-primary" />
+                <span>Bằng chứng / Biên bản làm việc / Ảnh chụp buổi họp</span>
+              </label>
+              <span className="text-[11px] text-muted-foreground">
+                {attachments.length > 0 ? `${attachments.length} tệp đã chọn` : "Tùy chọn"}
+              </span>
+            </div>
+
+            {/* Danh sách tệp đã tải lên */}
+            {attachments.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                {attachments.map((att, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-card border border-border/60 text-xs shadow-2xs hover:border-primary/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-4 w-4 text-primary shrink-0" />
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate font-medium text-foreground hover:text-primary hover:underline text-xs"
+                        title={att.name}
+                      >
+                        {att.name}
+                      </a>
+                      {att.size ? (
+                        <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                          ({formatFileSize(att.size)})
+                        </span>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveAttachment(idx)}
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Input upload */}
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                id="workLogFilesInput"
+                onChange={handleFileUpload}
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+              />
+              <label
+                htmlFor="workLogFilesInput"
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/90 hover:border-primary/60 bg-background/50 hover:bg-primary/5 transition-all cursor-pointer text-xs ${
+                  isUploadingFile ? "pointer-events-none opacity-60" : ""
+                }`}
+              >
+                {isUploadingFile ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-muted-foreground font-medium">Đang tải tệp lên hệ thống...</span>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud className="h-4 w-4 text-primary" />
+                    <span className="text-muted-foreground">
+                      Nhấn để tải lên <strong className="text-foreground">Biên bản họp, Ảnh buổi làm việc</strong> (Tối đa 50MB)
+                    </span>
+                  </>
+                )}
+              </label>
+            </div>
           </div>
+
+          {/* CHECKBOX & FORM TẠO LỊCH HẸN TIẾP THEO (MASTER CALENDAR) */}
+          {!isEditing && (
+            <div
+              className={`p-3.5 rounded-xl border transition-all ${
+                isCreateNextMeeting
+                  ? "border-primary/40 bg-primary/5 shadow-xs"
+                  : "border-border/70 bg-card/60"
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Checkbox
+                  id="createNextMeeting"
+                  checked={isCreateNextMeeting}
+                  onCheckedChange={(checked) => setIsCreateNextMeeting(Boolean(checked))}
+                />
+                <label
+                  htmlFor="createNextMeeting"
+                  className="text-xs font-semibold text-foreground flex items-center gap-1.5 cursor-pointer select-none"
+                >
+                  <CalendarPlus className="h-4 w-4 text-primary" />
+                  <span>📅 Tạo lịch hẹn cho buổi làm việc tiếp theo (Đồng bộ lên Master Calendar)</span>
+                </label>
+              </div>
+
+              {isCreateNextMeeting && (
+                <div className="mt-3 pt-3 border-t border-primary/15 space-y-3">
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-primary/10 p-2 rounded-lg text-primary">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Hệ thống sẽ tạo một lịch hẹn tương lai trên <strong>Master Calendar</strong> để lãnh đạo và các thành viên chuẩn bị.
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-foreground">
+                        Thời gian hẹn tiếp theo <span className="text-destructive">*</span>
+                      </label>
+                      <Input
+                        type="datetime-local"
+                        value={nextMeetingDate}
+                        onChange={(e) => setNextMeetingDate(e.target.value)}
+                        className="text-xs h-8.5 bg-background"
+                        required={isCreateNextMeeting}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-foreground">Hình thức buổi hẹn</label>
+                      <Select
+                        value={nextMeetingType}
+                        onValueChange={(val) => setNextMeetingType(val as DltmWorkLog["meetingType"])}
+                      >
+                        <SelectTrigger className="text-xs h-8.5 bg-background">
+                          <SelectValue placeholder="Hình thức" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TRUC_TIEP" className="text-xs">
+                            🏢 Họp trực tiếp tại địa phương
+                          </SelectItem>
+                          <SelectItem value="ONLINE" className="text-xs">
+                            💻 Họp trực tuyến (Google Meet/Zoom)
+                          </SelectItem>
+                          <SelectItem value="DIEN_THOAI" className="text-xs">
+                            📞 Trao đổi qua điện thoại
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-foreground">Tiêu đề buổi hẹn tiếp theo</label>
+                      <Input
+                        value={nextMeetingTitle}
+                        onChange={(e) => setNextMeetingTitle(e.target.value)}
+                        placeholder={`VD: Buổi làm việc tiếp theo - ${provinceName}`}
+                        className="text-xs h-8.5 bg-background"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-foreground">Địa điểm / Link họp tiếp theo</label>
+                      <Input
+                        value={nextMeetingLocation}
+                        onChange={(e) => setNextMeetingLocation(e.target.value)}
+                        placeholder="VD: Trụ sở UBND Tỉnh hoặc Google Meet..."
+                        className="text-xs h-8.5 bg-background"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Chọn lãnh đạo tham gia */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground">
+                        Lãnh đạo IGB chủ trì / tham gia
+                      </label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between h-8.5 text-xs font-normal bg-background"
+                          >
+                            <span className="text-muted-foreground">
+                              {participantIds.length > 0
+                                ? `Đã chọn ${participantIds.length} người`
+                                : "Chọn nhân sự tham gia..."}
+                            </span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[220px]" align="start">
+                          <div className="p-1">
+                            <Input
+                              placeholder="Tìm nhân sự..."
+                              value={searchParticipant}
+                              onChange={(e) => setSearchParticipant(e.target.value)}
+                              className="text-xs h-7 mb-2 bg-background"
+                            />
+                            <div className="max-h-[140px] overflow-y-auto space-y-1">
+                              {leaders
+                                .filter(
+                                  (l: any) =>
+                                    !searchParticipant ||
+                                    l.name.toLowerCase().includes(searchParticipant.toLowerCase())
+                                )
+                                .map((leader: any) => (
+                                  <label
+                                    key={leader.id}
+                                    className="flex items-center gap-2 cursor-pointer text-xs hover:bg-muted/50 p-1.5 rounded"
+                                  >
+                                    <Checkbox
+                                      checked={participantIds.includes(String(leader.id))}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setParticipantIds([...participantIds, String(leader.id)]);
+                                        } else {
+                                          setParticipantIds(
+                                            participantIds.filter((id) => id !== String(leader.id))
+                                          );
+                                        }
+                                      }}
+                                    />
+                                    <span className="truncate">
+                                      {leader.name} ({leader.role})
+                                    </span>
+                                  </label>
+                                ))}
+                            </div>
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      {/* Danh sách người đã chọn */}
+                      {participantIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {participantIds.map((id) => {
+                            const l = leaders.find((leader: any) => String(leader.id) === id);
+                            if (!l) return null;
+                            return (
+                              <div
+                                key={id}
+                                className="flex items-center gap-1.5 bg-primary/10 text-primary rounded-full px-2 py-0.5 text-[11px] max-w-full"
+                              >
+                                <span className="truncate max-w-[120px] font-medium">{l.name}</span>
+                                <X
+                                  className="h-3 w-3 cursor-pointer hover:opacity-75 shrink-0"
+                                  onClick={() =>
+                                    setParticipantIds(participantIds.filter((pid) => pid !== id))
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Thời lượng */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground">
+                        Thời lượng dự kiến
+                      </label>
+                      <Select
+                        value={String(durationMinutes)}
+                        onValueChange={(val) => setDurationMinutes(Number(val))}
+                      >
+                        <SelectTrigger className="text-xs h-8.5 bg-background">
+                          <SelectValue placeholder="Thời lượng" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="30" className="text-xs">
+                            30 phút
+                          </SelectItem>
+                          <SelectItem value="60" className="text-xs">
+                            60 phút (1 tiếng)
+                          </SelectItem>
+                          <SelectItem value="90" className="text-xs">
+                            90 phút (1.5 tiếng)
+                          </SelectItem>
+                          <SelectItem value="120" className="text-xs">
+                            120 phút (2 tiếng)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
+              disabled={isSubmitting || isUploadingFile}
               onClick={() => onOpenChange(false)}
-              className="text-xs"
+              className="text-xs cursor-pointer"
             >
               Hủy
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-semibold">
-              Lưu nhật ký
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isSubmitting || isUploadingFile}
+              className="text-xs font-semibold gap-1.5 cursor-pointer"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Đang lưu...</span>
+                </>
+              ) : isEditing ? (
+                <span>Cập nhật nhật ký</span>
+              ) : (
+                <span>Lưu nhật ký</span>
+              )}
             </Button>
           </DialogFooter>
         </form>
@@ -179,4 +862,3 @@ export function GovLogDialog({
 }
 
 export const DltmLogDialog = GovLogDialog;
-

@@ -9,6 +9,7 @@ import {
   MoreVertical,
   ChevronRight,
   MapPin,
+  User,
 } from "lucide-react";
 import { useGovStore } from "../store/govStore";
 import { GovProject, GovStage } from "../types";
@@ -32,8 +33,7 @@ export function GovKanbanPipeline() {
 
   const filteredProjects = React.useMemo(() => {
     return projects.filter((p) => {
-      // 0. Active Solution
-      if ((p.solutionId || "dltm") !== activeSolutionId) return false;
+      if (activeSolutionId && p.solutionId !== activeSolutionId) return false;
 
       if (filters.search && filters.search.trim()) {
         const q = filters.search.toLowerCase().trim();
@@ -59,7 +59,6 @@ export function GovKanbanPipeline() {
             key={stageKey}
             className="flex flex-col flex-1 min-w-[270px] max-w-[320px] rounded-2xl bg-card/70 border border-border/80 p-3 space-y-3 backdrop-blur-md shadow-2xs shrink-0"
           >
-            {/* Column Header */}
             <div className="flex items-center justify-between pb-2 border-b border-border/60">
               <div className="flex items-center gap-2">
                 <span
@@ -75,7 +74,6 @@ export function GovKanbanPipeline() {
               </Badge>
             </div>
 
-            {/* Column Cards Container */}
             <div className="flex flex-col space-y-2.5 min-h-[150px] overflow-y-auto max-h-[calc(100vh-400px)] pr-1">
               {stageProjects.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-8 text-center text-muted-foreground/60 text-xs border border-dashed border-border/60 rounded-xl">
@@ -107,7 +105,6 @@ export function GovKanbanPipeline() {
                       </span>
                     </div>
 
-                    {/* Lịch họp nếu có */}
                     {project.nextMeetingDate && (
                       <div className="p-1.5 rounded-lg bg-primary/5 border border-primary/20 text-[10px] text-primary flex items-start gap-1">
                         <Calendar className="h-3 w-3 shrink-0 mt-0.5" />
@@ -115,7 +112,6 @@ export function GovKanbanPipeline() {
                       </div>
                     )}
 
-                    {/* Footer card */}
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
                       <div className="flex items-center gap-2 font-mono text-[10px]">
                         <span title="Tài liệu" className="flex items-center gap-0.5">
@@ -129,12 +125,21 @@ export function GovKanbanPipeline() {
                       </div>
 
                       <div className="flex items-center gap-1">
-                        <img
-                          src={project.igbAssignee.avatar}
-                          alt={project.igbAssignee.name}
-                          className="h-5 w-5 rounded-full object-cover"
-                          title={`Phụ trách: ${project.igbAssignee.name}`}
-                        />
+                        {project.igbAssignee.avatar ? (
+                          <img
+                            src={project.igbAssignee.avatar}
+                            alt={project.igbAssignee.name}
+                            className="h-5 w-5 rounded-full object-cover"
+                            title={`Phụ trách: ${project.igbAssignee.name}`}
+                          />
+                        ) : (
+                          <div 
+                            className="h-5 w-5 rounded-full bg-muted flex items-center justify-center border"
+                            title="Chưa phân công"
+                          >
+                            <User className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -149,4 +154,3 @@ export function GovKanbanPipeline() {
 }
 
 export const DltmKanbanPipeline = GovKanbanPipeline;
-

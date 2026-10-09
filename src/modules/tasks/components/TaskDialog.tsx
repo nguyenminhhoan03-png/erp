@@ -19,12 +19,17 @@ import {
   Ban,
   HelpCircle,
   Check,
+  ChevronDown,
 } from "lucide-react";
 import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
-import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG, AVAILABLE_PROJECTS } from "../constants";
+import {
+  TASK_STATUS_CONFIG,
+  TASK_PRIORITY_CONFIG,
+  TASK_RESOLUTION_CONFIG,
+  KANBAN_COLUMNS,
+} from "../constants";
 import { TaskResolution } from "../types";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { can, checkTaskTransitionPermission } from "@/shared/permissions/can";
 import { formatDate, formatDateTime, isOverdue } from "@/lib/date";
 import {
@@ -34,6 +39,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/shared/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { Checkbox } from "@/shared/components/ui/checkbox";
@@ -57,8 +68,9 @@ export function TaskDialog() {
     rejectTask,
     closeTask,
     reopenTask,
+    projects,
   } = useTaskStore();
-  const { currentUser, getUserById } = useUserStore();
+  const { currentUser, getUserById, departments } = useUserStore();
 
   const [newChecklistTitle, setNewChecklistTitle] = React.useState("");
   const [newComment, setNewComment] = React.useState("");
@@ -90,8 +102,8 @@ export function TaskDialog() {
 
   const statusCfg = TASK_STATUS_CONFIG[activeTask.status];
   const priorityCfg = TASK_PRIORITY_CONFIG[activeTask.priority];
-  const dept = MOCK_DEPARTMENTS.find((d) => d.id === activeTask.departmentId);
-  const project = AVAILABLE_PROJECTS.find((p) => p.id === activeTask.projectId);
+  const dept = departments.find((d) => d.id === activeTask.departmentId);
+  const project = projects.find((p) => p.id === activeTask.projectId);
   const creator = getUserById(activeTask.creatorId);
   const overdue = isOverdue(activeTask.dueDate, activeTask.status);
 
@@ -240,12 +252,55 @@ export function TaskDialog() {
               </Badge>
             )}
 
-            <Badge
-              variant="outline"
-              className={cn("text-xs font-semibold ml-auto", statusCfg.badgeBg, statusCfg.badgeText)}
-            >
-              {statusCfg.label}
-            </Badge>
+            {/* Trạng thái công việc dạng Dropdown Menu (chuẩn Jira / Linear) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ml-auto transition-all cursor-pointer shadow-2xs hover:opacity-90 shrink-0",
+                    statusCfg.badgeBg,
+                    statusCfg.badgeText,
+                    statusCfg.borderColor
+                  )}
+                  title="Bấm để chuyển trạng thái công việc nhanh"
+                >
+                  <span className={cn("w-2 h-2 rounded-full shrink-0", statusCfg.dotColor)} />
+                  <span>{statusCfg.label}</span>
+                  <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 p-1">
+                <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Chuyển trạng thái công việc
+                </div>
+                {KANBAN_COLUMNS.map((st) => {
+                  const cfg = TASK_STATUS_CONFIG[st];
+                  const isCurrent = activeTask.status === st;
+                  return (
+                    <DropdownMenuItem
+                      key={st}
+                      onClick={() => {
+                        if (isCurrent) return;
+                        if (st === "CANCELLED") {
+                          setIsCloseModalOpen(true);
+                        } else {
+                          handleQuickStatusChange(st);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer",
+                        isCurrent && "bg-muted font-bold text-primary"
+                      )}
+                    >
+                      <span className={cn("w-2 h-2 rounded-full shrink-0", cfg.dotColor)} />
+                      <span className="flex-1">{cfg.label}</span>
+                      {isCurrent && <Check className="h-3.5 w-3.5 text-primary" />}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <DialogTitle className="text-xl font-bold leading-snug text-foreground">
@@ -254,7 +309,7 @@ export function TaskDialog() {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
           {/* Closed / Cancelled Banner (Jira Resolution) */}
           {activeTask.status === "CANCELLED" && (
             <div className="p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-900/60 space-y-2.5">
@@ -533,122 +588,32 @@ export function TaskDialog() {
           </div>
         </div>
 
-        {/* Action Footer with Workflow Actions */}
-        <div className="p-4 border-t border-border/80 bg-muted/20 flex flex-wrap items-center justify-between gap-2">
-          {/* Left: Delete task if permitted */}
+        {/* Action Footer */}
+        <div className="p-4 border-t border-border/80 bg-muted/20 flex items-center justify-between gap-2">
+          {/* Left: Tùy chọn Xóa task (chỉ cho phép Admin/Trưởng phòng khi cần dọn dẹp task rác) */}
           <div>
             {canDelete && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleDelete}
-                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 gap-1.5 text-xs h-8.5"
+                className="text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 gap-1.5 text-xs h-8 cursor-pointer"
+                title="Chỉ dùng khi cần xóa vĩnh viễn task tạo nhầm. Thông thường nên kéo vào cột Đã đóng / Hủy."
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5" />
                 <span>Xóa task</span>
               </Button>
             )}
           </div>
 
-          {/* Right: State workflow action buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* If Task is PENDING_APPROVAL */}
-            {activeTask.status === "PENDING_APPROVAL" && isManagerOrAdmin && (
-              <>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleReject}
-                  className="gap-1.5 h-8.5 text-xs"
-                >
-                  <XCircle className="h-4 w-4" />
-                  <span>Từ chối</span>
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleApprove}
-                  className="gap-1.5 h-8.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Duyệt công việc</span>
-                </Button>
-              </>
-            )}
-
-            {/* If Task is TODO and assignee */}
-            {activeTask.status === "TODO" && (
-              <Button
-                size="sm"
-                onClick={() => handleQuickStatusChange("IN_PROGRESS")}
-                className="gap-1.5 h-8.5 text-xs"
-              >
-                <span>Bắt đầu thực hiện</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            )}
-
-            {/* If Task is IN_PROGRESS and assignee */}
-            {activeTask.status === "IN_PROGRESS" && (
-              <Button
-                size="sm"
-                onClick={() => handleQuickStatusChange("IN_REVIEW")}
-                className="gap-1.5 h-8.5 text-xs bg-purple-600 hover:bg-purple-700 text-white"
-              >
-                <span>Gửi nghiệm thu (Review)</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            )}
-
-            {/* If Task is IN_REVIEW and manager */}
-            {activeTask.status === "IN_REVIEW" && isManagerOrAdmin && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQuickStatusChange("IN_PROGRESS")}
-                  className="gap-1.5 h-8.5 text-xs"
-                >
-                  <span>Yêu cầu sửa đổi</span>
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => handleQuickStatusChange("DONE")}
-                  className="gap-1.5 h-8.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Nghiệm thu hoàn thành</span>
-                </Button>
-              </>
-            )}
-
-            {/* Nếu task đã đóng (CANCELLED): Nút mở lại công việc (Reopen) */}
-            {activeTask.status === "CANCELLED" && (
-              <Button
-                size="sm"
-                onClick={handleReopen}
-                className="gap-1.5 h-8.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>Mở lại công việc (Reopen)</span>
-              </Button>
-            )}
-
-            {/* Nút Đóng task chuẩn Jira (Won't Fix / Not a Bug / Duplicate): hiển thị khi task chưa đóng */}
-            {activeTask.status !== "CANCELLED" && activeTask.status !== "DONE" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCloseModalOpen(true)}
-                className="gap-1.5 h-8.5 text-xs text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/20"
-                title="Đóng task nếu phát hiện không phải bug, trùng lặp hoặc không cần fix nữa"
-              >
-                <Ban className="h-3.5 w-3.5" />
-                <span>Đóng task (Won&apos;t Fix)</span>
-              </Button>
-            )}
-
-            <Button variant="outline" size="sm" onClick={closeDetail} className="h-8.5 text-xs">
+          {/* Right: Nút Đóng cửa sổ */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={closeDetail}
+              className="h-8 text-xs font-semibold px-4 cursor-pointer"
+            >
               Đóng cửa sổ
             </Button>
           </div>

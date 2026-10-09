@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ShieldCheck,
   Compass,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "../store/useUserStore";
@@ -39,8 +40,10 @@ export function AppSidebar() {
   // Đồng bộ dữ liệu sau khi component mount phía client để tránh hydration mismatch
   React.useEffect(() => {
     setMounted(true);
-    fetchTasks();
-  }, [fetchTasks]);
+    if (tasks.length === 0) {
+      fetchTasks();
+    }
+  }, [fetchTasks, tasks.length]);
 
   const toggleGroup = (groupTitle: string) => {
     setCollapsedGroups((prev) => ({
@@ -91,6 +94,11 @@ export function AppSidebar() {
           href: "/gov-projects",
           icon: Compass,
           badgeVariant: "default" as const,
+        },
+        {
+          title: "Lịch công tác",
+          href: "/gov-calendar",
+          icon: CalendarDays,
         },
       ],
     },

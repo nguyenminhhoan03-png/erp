@@ -1,31 +1,31 @@
 export type ProjectCategory = "DLTM" | "SMART_LAND" | "SMART_HEALTH" | "SMART_EDU" | "SMART_TRAFFIC" | "OUTSOURCE" | "INTERNAL";
 
 export interface DigitalSolution {
-  id: string; // 'dltm', 'smart_land', 'smart_health', 'smart_edu', 'smart_traffic'
-  name: string; // "Du lịch Thông minh (DLTM)"
-  shortName: string; // "DLTM"
+  id: string;
+  name: string;
+  shortName: string;
   code: string;
-  iconName: string; // "Compass" | "Map" | "HeartPulse" | "GraduationCap" | "Car" | "Building2" | "Layers" | "Trees"
+  iconName: string;
   colorHex: string;
   badgeClass: string;
-  targetGovDepartment: string; // "Sở Du lịch / Sở VHTTDL", "Sở Tài nguyên & Môi trường", "Sở Y tế"...
-  dataAssetDescription: string; // "Điểm danh lam, khách sạn, cẩm nang", "Bản đồ địa chính, quy hoạch đất"...
+  targetGovDepartment: string;
+  dataAssetDescription: string;
   description: string;
-  activeCount: number; // Số tỉnh đang triển khai
-  totalTargetProvinces?: number; // Mặc định 34
+  activeCount: number;
+  totalTargetProvinces?: number;
 }
 
 export type GovStage =
-  | "DISPATCHED"    // 1. IGB đã gửi công văn đề nghị tài trợ
-  | "FEEDBACK"      // 2. Địa phương phản hồi, đang lấy yêu cầu
-  | "MOU_SIGNED"    // 3. Đã làm việc & Ký biên bản ghi nhớ (MOU)
-  | "SPONSOR_AGREED"// 4. Đồng ý tiếp nhận tài trợ chính thức
-  | "DATA_COLLECT"  // 5. Thu thập thông tin, logo, dữ liệu chuyên ngành
-  | "DEPLOYING"     // 6. Đang triển khai kỹ thuật & Vận hành
-  | "COMPLETED"     // 7. Đã bàn giao / Đã tài trợ hoàn tất
-  | "PAUSED";       // Tạm dừng / Cần liên hệ lại
+  | "NOT_STARTED"
+  | "DISPATCHED"
+  | "FEEDBACK"
+  | "MOU_SIGNED"
+  | "SPONSOR_AGREED"
+  | "DATA_COLLECT"
+  | "DEPLOYING"
+  | "COMPLETED"
+  | "PAUSED";
 
-// Alias for compatibility
 export type DltmStage = GovStage;
 
 export type Region = "Bắc Bộ" | "Trung Bộ" | "Nam Bộ" | "Tây Nguyên";
@@ -45,10 +45,27 @@ export interface GovDocument {
 }
 export type DltmDocument = GovDocument;
 
+export type GovLogType =
+  | "DISPATCH_SENT"
+  | "DISPATCH_RECEIVED"
+  | "CALL"
+  | "MEETING"
+  | "MOU_SIGNING"
+  | "DATA_COLLECT"
+  | "TECHNICAL"
+  | "ACCEPTANCE"
+  | "STAGE_CHANGE";
+export type DltmLogType = GovLogType;
+
 export interface GovWorkLog {
   id: string;
   projectId: string;
   solutionId?: string;
+  stageId?: number;
+  stageName?: string;
+  stageColor?: string;
+  logType?: GovLogType;
+  title?: string;
   meetingDate: string;
   meetingType: "TRUC_TIEP" | "ONLINE" | "DIEN_THOAI";
   participants: string;
@@ -56,6 +73,19 @@ export interface GovWorkLog {
   agreements?: string;
   nextSteps?: string;
   recordedBy: string;
+  location?: string;
+  isSyncCalendar?: boolean;
+  isMasterCalendar?: boolean;
+  hostUserId?: number;
+  participantIds?: (string | number)[];
+  durationMinutes?: number;
+  attachments?: {
+    name: string;
+    url: string;
+    size?: number;
+    type?: string;
+  }[];
+  metadata?: Record<string, any>;
   createdAt: string;
 }
 export type DltmWorkLog = GovWorkLog;
@@ -64,15 +94,48 @@ export interface GovMeetingSchedule {
   id: string;
   projectId: string;
   solutionId?: string;
+  stageId?: number | string | null;
+  stageName?: string;
+  stageColor?: string;
+  stageOrder?: number;
   provinceName: string;
   scheduledAt: string;
   location: string;
   content: string;
+  title?: string;
+  notes?: string;
   hostName: string;
+  hostUser?: string;
+  hostUserId?: number;
+  participantIds?: (string | number)[];
+  meetingType?: "TRUC_TIEP" | "ONLINE" | "DIEN_THOAI";
   contactPerson: string;
+  partnerParticipants?: string;
   status: "UPCOMING" | "DONE" | "CANCELLED";
+  hasConflict?: boolean;
+  conflictingWith?: string;
+  conflicts?: {
+    meeting_id: number | string;
+    label: string;
+    users?: { id: number | string; name: string }[];
+  }[];
+  conflictUserIds?: (string | number)[];
+  conflictChecked?: boolean;
 }
 export type DltmMeetingSchedule = GovMeetingSchedule;
+
+export interface GovCalendarSummary {
+  upcoming: number;
+  today: number;
+  this_week: number;
+  this_month: number;
+  upcoming_onsite: number;
+  upcoming_online: number;
+  completed_this_month: number;
+  conflict_count: number;
+  total: number;
+}
+export type DltmCalendarSummary = GovCalendarSummary;
 
 export interface GovProjectTask {
   id: string;
@@ -89,10 +152,12 @@ export type DltmProjectTask = GovProjectTask;
 
 export interface GovProject {
   id: string;
+  projectId?: string;
   code: string;
   name?: string;
-  solutionId?: string; // 'dltm', 'smart_land', 'smart_health'...
+  solutionId?: string;
   category?: ProjectCategory;
+  provinceId?: number;
   provinceName: string;
   region: Region;
   isMergedProvince?: boolean;
@@ -101,7 +166,7 @@ export interface GovProject {
   leaderContact: {
     fullName: string;
     position: string;
-    departmentName?: string; // VD: Sở Du lịch hoặc Sở Tài nguyên & Môi trường
+    departmentName?: string;
     phone: string;
     email: string;
   };

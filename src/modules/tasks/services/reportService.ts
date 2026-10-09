@@ -10,15 +10,21 @@ function fakeDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const STORAGE_KEY = "erp_reports_cache_v1";
+const STORAGE_KEY = "erp_reports_clean_v1";
 
 function getStoredReports(): DailyReport[] {
   if (typeof window !== "undefined") {
     try {
+      localStorage.removeItem("erp_reports_cache_v1");
+    } catch {
+      // Ignore
+    }
+
+    try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -26,10 +32,9 @@ function getStoredReports(): DailyReport[] {
       // Ignore
     }
   }
-  const defaultReports = [...INITIAL_MOCK_REPORTS];
-  saveStoredReports(defaultReports);
-  return defaultReports;
+  return [];
 }
+
 
 function saveStoredReports(reports: DailyReport[]): void {
   if (typeof window !== "undefined") {

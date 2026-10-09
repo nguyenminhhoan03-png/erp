@@ -1,14 +1,21 @@
 import { create } from "zustand";
-import { Task, TaskFilterParams, TaskResolution, TaskStatus } from "../types";
+import { CustomTaskStatus, Task, TaskFilterParams, TaskResolution, TaskStatus } from "../types";
 import { taskService } from "../services/taskService";
 import { reportService } from "../services/reportService";
+import { taskStatusService } from "../services/taskStatusService";
 import { INITIAL_MOCK_TASKS } from "../mock-data";
 import { User } from "@/shared/types";
 import { checkTaskTransitionPermission } from "@/shared/permissions/can";
 
 interface TaskState {
   tasks: Task[];
+  projects: import("../types").TaskProject[];
+  statuses: CustomTaskStatus[];
+  isWorkflowConfigOpen: boolean;
   isLoading: boolean;
+  isFetchingMore: Record<string, boolean>;
+  hasMore: Record<string, boolean>;
+  cursors: Record<string, string | null>;
   error: string | null;
   filters: TaskFilterParams;
   viewMode: "kanban" | "list";
@@ -18,6 +25,21 @@ interface TaskState {
 
   // Actions
   fetchTasks: () => Promise<void>;
+  fetchProjects: () => Promise<void>;
+  fetchStatuses: (projectId?: string, departmentId?: string) => Promise<void>;
+  openWorkflowConfig: () => void;
+  closeWorkflowConfig: () => void;
+  addStatus: (data: {
+    name: string;
+    category: "TODO" | "IN_PROGRESS" | "DONE";
+    color?: string;
+    projectId?: string;
+    departmentId?: string;
+  }) => Promise<CustomTaskStatus>;
+  updateStatus: (id: string, updates: Partial<CustomTaskStatus>) => Promise<CustomTaskStatus>;
+  deleteStatus: (id: string, targetKey?: string) => Promise<boolean>;
+  reorderStatuses: (items: { id: number | string; order_index: number }[]) => Promise<boolean>;
+  fetchMoreTasks: (status?: TaskStatus) => Promise<void>;
   setFilters: (newFilters: Partial<TaskFilterParams>) => void;
   resetFilters: () => void;
   setViewMode: (mode: "kanban" | "list") => void;
@@ -53,8 +75,14 @@ interface TaskState {
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
-  tasks: [...INITIAL_MOCK_TASKS],
+  tasks: [],
+  projects: [],
+  statuses: [],
+  isWorkflowConfigOpen: false,
   isLoading: false,
+  isFetchingMore: {},
+  hasMore: {},
+  cursors: {},
   error: null,
   filters: {
     search: "",
@@ -71,14 +99,186 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   isDetailOpen: false,
   isCreateOpen: false,
 
-  fetchTasks: async () => {
-    set({ isLoading: true, error: null });
+  openWorkflowConfig: () => set({ isWorkflowConfigOpen: true }),
+  closeWorkflowConfig: () => set({ isWorkflowConfigOpen: false }),
+
+  fetchStatuses: async (projectId?: string, departmentId?: string) => {
     try {
-      const data = await taskService.getTasks(get().filters);
-      set({ tasks: data, isLoading: false });
+      const pId = projectId !== "ALL" ? projectId : undefined;
+      const dId = departmentId !== "ALL" ? departmentId : undefined;
+      const statuses = await taskStatusService.getStatuses(pId, dId);
+      set({ statuses });
+    } catch (err) {
+      console.warn("Lỗi khi tải statuses:", err);
+    }
+  },
+
+  addStatus: async (data) => {
+    const newStatus = await taskStatusService.createStatus(data);
+    set((state) => ({ statuses: [...state.statuses, newStatus] }));
+    return newStatus;
+  },
+
+  updateStatus: async (id, updates) => {
+    const updated = await taskStatusService.updateStatus(id, updates);
+    set((state) => ({
+      statuses: state.statuses.map((s) => (s.id === id ? { ...s, ...updated } : s)),
+    }));
+    return updated;
+  },
+
+  deleteStatus: async (id, targetKey) => {
+    const success = await taskStatusService.deleteStatus(id, targetKey);
+    if (success) {
+      set((state) => ({
+        statuses: state.statuses.filter((s) => s.id !== id),
+        tasks: state.tasks.map((t) => {
+          const deleted = state.statuses.find((s) => s.id === id);
+          return deleted && t.status === deleted.key ? { ...t, status: targetKey || "TODO" } : t;
+        }),
+      }));
+    }
+    return success;
+  },
+
+  reorderStatuses: async (items) => {
+    const success = await taskStatusService.reorderStatuses(items);
+    if (success) {
+      set((state) => {
+        const orderMap = new Map(items.map((it) => [String(it.id), it.order_index]));
+        const reordered = [...state.statuses].sort((a, b) => {
+          const ordA = orderMap.get(String(a.id)) ?? a.orderIndex;
+          const ordB = orderMap.get(String(b.id)) ?? b.orderIndex;
+          return ordA - ordB;
+        });
+        return { statuses: reordered };
+      });
+    }
+    return success;
+  },
+
+  fetchProjects: async () => {
+    if (get().projects.length > 0) return;
+    try {
+      const { apiRequest } = await import("@/lib/api-client");
+      const res = await apiRequest<{ success: boolean; data: { internal: any[]; gov_solutions: any[] } }>("/erp/projects");
+      if (res && res.success && res.data) {
+        const { internal = [], gov_solutions = [] } = res.data;
+
+        const internalProjects: import("../types").TaskProject[] = [
+          {
+            id: "ERP_CORE",
+            key: "ERP",
+            name: "Hệ thống ERP Doanh nghiệp",
+            category: "INTERNAL",
+          },
+          ...internal.map((p) => ({
+            id: String(p.id),
+            key: (p as any).code || String(p.id),
+            code: (p as any).code,
+            name: p.name,
+            category: "INTERNAL" as const,
+          })),
+        ];
+
+        const govProjects: import("../types").TaskProject[] = gov_solutions.map((gp) => {
+          return {
+            id: `GOV_${gp.id}`,
+            key: gp.master_project?.code || String(gp.id),
+            code: gp.master_project?.code,
+            name: `${gp.province?.name || "Không rõ"}`,
+            category: "GOV_SOLUTION" as const,
+            groupName: gp.master_project?.name || "DỰ ÁN CĐS TỈNH",
+          };
+        });
+
+        set({ projects: [...internalProjects, ...govProjects] });
+        return;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch projects", err);
+    }
+  },
+
+  fetchTasks: async () => {
+    const currentState = get();
+    if (currentState.isLoading) return;
+
+    set({ isLoading: true, error: null });
+
+    // Đảm bảo fetch projects và statuses nếu chưa có
+    if (currentState.projects.length === 0) {
+      currentState.fetchProjects();
+    }
+    if (currentState.statuses.length === 0) {
+      await currentState.fetchStatuses(currentState.filters.projectId, currentState.filters.departmentId);
+    }
+
+    try {
+      const state = get();
+      const baseFilters = state.filters;
+
+      if (state.viewMode === "kanban") {
+        // Tối ưu Kanban: gọi endpoint kanban tải ~10 task mỗi cột chuẩn xác
+        const { tasks, cursors, hasMore } = await taskService.getKanbanTasks({
+          ...baseFilters,
+          perPage: 10,
+        });
+
+        set({ tasks, cursors, hasMore, isLoading: false });
+      } else {
+        // List View: Fetch 10 task mỗi trang theo chuẩn UX
+        const { tasks, meta } = await taskService.getTasks({ ...baseFilters, perPage: 10 });
+        set({
+          tasks,
+          cursors: { ALL: meta?.next_cursor || null },
+          hasMore: { ALL: meta?.has_more ?? false },
+          isLoading: false
+        });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Có lỗi xảy ra khi tải dữ liệu công việc";
       set({ error: message, isLoading: false });
+    }
+  },
+
+  fetchMoreTasks: async (statusColumn?: TaskStatus) => {
+    const state = get();
+    // Dùng key là status truyền vào, nếu không truyền thì ngầm hiểu là view dạng List (ALL)
+    const cursorKey = statusColumn || "ALL";
+
+    if (state.isFetchingMore[cursorKey] || state.hasMore[cursorKey] === false || !state.cursors[cursorKey]) return;
+
+    set({ isFetchingMore: { ...state.isFetchingMore, [cursorKey]: true }, error: null });
+    try {
+      const filtersToApply = { ...state.filters };
+      if (statusColumn) {
+        filtersToApply.status = statusColumn;
+        filtersToApply.perPage = 10; // Load thêm 10 task mỗi lần cuộn theo đúng yêu cầu
+      } else {
+        filtersToApply.perPage = 10;
+      }
+
+      const { tasks, meta } = await taskService.getTasks({
+        ...filtersToApply,
+        cursor: state.cursors[cursorKey],
+      });
+
+      // Gộp task mới, đảm bảo không trùng ID
+      const newTasks = tasks.filter(t => !state.tasks.find(existing => existing.id === t.id));
+
+      set((prev) => ({
+        tasks: [...prev.tasks, ...newTasks],
+        isFetchingMore: { ...prev.isFetchingMore, [cursorKey]: false },
+        cursors: { ...prev.cursors, [cursorKey]: meta?.next_cursor || null },
+        hasMore: { ...prev.hasMore, [cursorKey]: meta?.has_more ?? false },
+      }));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Có lỗi xảy ra khi tải thêm dữ liệu";
+      set((prev) => ({
+        error: message,
+        isFetchingMore: { ...prev.isFetchingMore, [cursorKey]: false }
+      }));
     }
   },
 
@@ -141,8 +341,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       targetStatus === "DONE"
         ? "DONE"
         : targetStatus === "CANCELLED"
-        ? task.resolution || "WONT_FIX"
-        : undefined;
+          ? task.resolution || "WONT_FIX"
+          : undefined;
 
     const updatedTaskObj = {
       ...task,
@@ -328,12 +528,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   resetToDefault: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, tasks: [], cursors: {}, hasMore: {} });
     await Promise.all([
       taskService.resetToDefault(),
       reportService.resetToDefault(),
     ]);
-    const data = await taskService.getTasks(get().filters);
-    set({ tasks: data, isLoading: false });
+    get().fetchTasks();
   },
 }));

@@ -26,7 +26,6 @@ import { DailyReport, DailyReportItem, DailyReportStatus } from "@/modules/tasks
 import { DepartmentId } from "@/shared/types";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { useTaskStore } from "@/modules/tasks/store/taskStore";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
 import { UserAvatar } from "@/shared/components/UserAvatar";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -52,7 +51,7 @@ import { formatDate } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
 export default function DailyReportPage() {
-  const { currentUser, users } = useUserStore();
+  const { currentUser, users, departments } = useUserStore();
   const { fetchTasks } = useTaskStore();
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -266,7 +265,7 @@ export default function DailyReportPage() {
 
   const viewingDept = React.useMemo(() => {
     if (!viewingReport) return null;
-    return MOCK_DEPARTMENTS.find((d) => d.id === viewingReport.departmentId);
+    return departments.find((d) => d.id === viewingReport.departmentId);
   }, [viewingReport]);
 
   const viewingTotalHours = React.useMemo(() => {
@@ -301,14 +300,14 @@ export default function DailyReportPage() {
                 <SelectValue placeholder="Chọn phòng ban">
                   {selectedDepartment === "ALL"
                     ? "Tất cả phòng ban"
-                    : MOCK_DEPARTMENTS.find((d) => d.id === selectedDepartment)?.name}
+                    : departments.find((d) => d.id === selectedDepartment)?.name}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">
                   <span className="font-semibold">🏢 Tất cả phòng ban</span>
                 </SelectItem>
-                {MOCK_DEPARTMENTS.map((dept) => (
+                {departments.map((dept) => (
                   <SelectItem key={dept.id} value={dept.id}>
                     <div className="flex items-center gap-2">
                       <span
@@ -538,7 +537,7 @@ export default function DailyReportPage() {
               >
                 Tất cả phòng ban ({users.filter((u) => u.role !== "ADMIN").length})
               </button>
-              {MOCK_DEPARTMENTS.map((dept) => {
+              {departments.map((dept) => {
                 const count = users.filter((u) => u.departmentId === dept.id && u.role !== "ADMIN").length;
                 const isSelected = selectedDepartment === dept.id;
                 return (
@@ -702,7 +701,7 @@ export default function DailyReportPage() {
                         (r) => r.userId === user.id && r.date === selectedDate
                       );
                       const isSubmitted = userReport?.status === "SUBMITTED";
-                      const dept = MOCK_DEPARTMENTS.find((d) => d.id === user.departmentId);
+                      const dept = departments.find((d) => d.id === user.departmentId);
 
                       return (
                         <tr key={user.id} className="hover:bg-muted/30 transition-colors">

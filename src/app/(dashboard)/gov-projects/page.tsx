@@ -56,7 +56,6 @@ function GovProjectsContent() {
 
   return (
     <div className="space-y-4 max-w-[1650px] mx-auto pb-10">
-      {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -94,9 +93,7 @@ function GovProjectsContent() {
           </p>
         </div>
 
-        {/* Action Controls */}
         <div className="flex items-center gap-2.5">
-          {/* View mode toggle: Table vs Kanban */}
           <div className="flex items-center p-1 bg-muted/60 rounded-xl border border-border/70">
             <button
               type="button"
@@ -126,7 +123,6 @@ function GovProjectsContent() {
             </button>
           </div>
 
-          {/* Nút đặt lịch họp */}
           <Button
             size="sm"
             onClick={() => setOpenMeetingDialog(true)}
@@ -138,21 +134,16 @@ function GovProjectsContent() {
         </div>
       </div>
 
-      {/* Multi-Solution Switcher Bar */}
       <GovSolutionSwitcher />
 
-      {/* Phân hệ 1: Dashboard Thống kê & Lịch hẹn sắp tới */}
       <GovStatsHeader onOpenCreateMeeting={() => setOpenMeetingDialog(true)} />
 
-      {/* Phân hệ 2: Danh sách 34 Tỉnh thành & Pipeline */}
       <div className="pt-1">
         {viewMode === "table" ? <GovTableView /> : <GovKanbanPipeline />}
       </div>
 
-      {/* Workspace Drill-Down Modal */}
       <GovProjectDetailModal />
 
-      {/* Dialog Đặt lịch hẹn */}
       <GovMeetingDialog
         open={openMeetingDialog}
         onOpenChange={setOpenMeetingDialog}

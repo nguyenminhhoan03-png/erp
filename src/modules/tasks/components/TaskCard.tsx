@@ -11,8 +11,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Task } from "../types";
-import { TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG, AVAILABLE_PROJECTS } from "../constants";
-import { MOCK_DEPARTMENTS } from "@/shared/mock/departments";
+import { TASK_PRIORITY_CONFIG, TASK_RESOLUTION_CONFIG } from "../constants";
+import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { UserAvatar } from "@/shared/components/UserAvatar";
 import { Badge } from "@/shared/components/ui/badge";
@@ -25,33 +25,18 @@ interface TaskCardProps {
   isOverlay?: boolean;
 }
 
-export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
-  const { getUserById } = useUserStore();
+interface TaskCardContentProps extends TaskCardProps {
+  isDragging?: boolean;
+}
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: task.id,
-    data: {
-      type: "Task",
-      task,
-    },
-    disabled: isOverlay,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+const TaskCardContent = React.memo(
+  function TaskCardContentComponent({ task, onClick, isOverlay = false, isDragging = false }: TaskCardContentProps) {
+  const { getUserById, departments } = useUserStore();
+  const { projects } = useTaskStore();
 
   const priorityConfig = TASK_PRIORITY_CONFIG[task.priority];
-  const department = MOCK_DEPARTMENTS.find((d) => d.id === task.departmentId);
-  const project = AVAILABLE_PROJECTS.find((p) => p.id === task.projectId);
+  const department = departments.find((d) => d.id === task.departmentId);
+  const project = projects.find((p) => p.id === task.projectId);
   const overdue = isOverdue(task.dueDate, task.status);
 
   // Lấy danh sách users được gán
@@ -65,19 +50,17 @@ export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
       onClick={onClick}
       suppressHydrationWarning
       className={cn(
-        "group relative flex flex-col gap-2.5 rounded-xl border bg-card p-3.5 shadow-2xs hover:shadow-md transition-all duration-200 select-none cursor-grab active:cursor-grabbing border-border/80 hover:border-primary/40",
-        isDragging && "opacity-30 border-dashed border-primary",
-        isOverlay && "shadow-xl border-primary/60 rotate-1 cursor-grabbing scale-102 ring-2 ring-primary/20",
+        "group relative flex flex-col gap-2.5 rounded-xl border bg-card p-3.5 shadow-2xs hover:shadow-md select-none cursor-grab active:cursor-grabbing border-border/80 hover:border-primary/40",
+        !isOverlay && !isDragging && "transition-[border-color,box-shadow] duration-150",
+        isDragging && "opacity-25 border-dashed border-primary transition-none",
+        isOverlay && "shadow-2xl border-primary/60 rotate-1 cursor-grabbing scale-[1.02] ring-2 ring-primary/20 pointer-events-none transition-none",
         overdue && "border-rose-300/80 dark:border-rose-900/60"
       )}
     >
+
       {/* Top Header: Code, Department, Project, Priority / Resolution */}
       <div className="flex items-center justify-between gap-1 text-xs">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -103,9 +86,10 @@ export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
           {project && (
             <Badge
               variant="outline"
-              className={cn("text-[10px] px-1.5 py-0 h-4 font-semibold uppercase tracking-tight", project.badgeBg, project.badgeText)}
+              className={cn("text-[10px] px-1.5 py-0 h-4 font-semibold uppercase tracking-tight max-w-[120px] truncate block text-center", project.badgeBg, project.badgeText)}
+              title={project.name}
             >
-              {project.category === "GOV_SOLUTION" ? `🏛️ ${project.key}` : project.key}
+              {project.code ? project.code : project.name}
             </Badge>
           )}
         </div>
@@ -221,6 +205,48 @@ export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
           )}
         </div>
       </div>
+    </div>
+  );
+  },
+  (prev, next) => {
+    return prev.task === next.task && prev.isOverlay === next.isOverlay && prev.isDragging === next.isDragging;
+  }
+);
+
+export function TaskCard({ task, onClick, isOverlay = false }: TaskCardProps) {
+  if (isOverlay) {
+    return <TaskCardContent task={task} onClick={onClick} isOverlay={true} />;
+  }
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: task.id,
+    data: {
+      type: "Task",
+      task,
+    },
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="touch-none select-none"
+    >
+      <TaskCardContent task={task} onClick={onClick} isDragging={isDragging} />
     </div>
   );
 }

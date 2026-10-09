@@ -2,20 +2,20 @@
 
 import React, { useState, useMemo } from "react";
 import {
-  Globe2,
   Search,
   Filter,
   CheckCircle2,
   Clock,
-  Sparkles,
-  MapPin,
-  ExternalLink,
-  Layers,
   ArrowRight,
+  Sparkles,
+  ExternalLink,
+  ChevronRight,
+  TrendingUp,
 } from "lucide-react";
 import { useGovStore } from "../store/govStore";
-import { GOV_STAGES, DLTM_STAGES, REGIONS } from "../constants";
-import { GovStage, DltmStage, Region, GovProject, DltmProject } from "../types";
+import { DLTM_STAGES, REGIONS } from "../constants";
+import { Region, DltmProject, DltmStage } from "../types";
+import { Badge } from "@/shared/components/ui/badge";
 import { Input } from "@/shared/components/ui/input";
 
 export function GovCrossSolutionMatrix() {
@@ -25,19 +25,30 @@ export function GovCrossSolutionMatrix() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRegion, setSelectedRegion] = useState<Region | "ALL">("ALL");
 
-  // Get distinct list of 34 provinces from base DLTM projects
   const baseProvinces = useMemo(() => {
-    const dltmList = projects.filter((p) => (p.solutionId || "dltm") === "dltm");
-    return dltmList.map((p) => ({
-      code: p.code,
-      provinceName: p.provinceName,
-      region: p.region,
-      isMergedProvince: p.isMergedProvince,
-      mergedNotes: p.mergedNotes,
-    }));
+    const seen = new Set<string>();
+    const list: {
+      code: string;
+      provinceName: string;
+      region: Region;
+      isMergedProvince?: boolean;
+      mergedNotes?: string;
+    }[] = [];
+    projects.forEach((p) => {
+      if (!seen.has(p.code)) {
+        seen.add(p.code);
+        list.push({
+          code: p.code,
+          provinceName: p.provinceName,
+          region: p.region,
+          isMergedProvince: p.isMergedProvince,
+          mergedNotes: p.mergedNotes,
+        });
+      }
+    });
+    return list;
   }, [projects]);
 
-  // Filter provinces by search and region
   const filteredProvinces = useMemo(() => {
     return baseProvinces.filter((prov) => {
       const matchSearch =
@@ -49,20 +60,18 @@ export function GovCrossSolutionMatrix() {
     });
   }, [baseProvinces, searchTerm, selectedRegion]);
 
-  // Fast map to find project by provinceCode and solutionId
   const projectMap = useMemo(() => {
     const map = new Map<string, DltmProject>();
     projects.forEach((p) => {
-      const key = `${p.code}_${p.solutionId || "dltm"}`;
+      const key = `${p.code}_${p.solutionId}`;
       map.set(key, p);
     });
     return map;
   }, [projects]);
 
-  // Calculate coverage stats per solution across all 34 provinces
   const solutionStats = useMemo(() => {
     return solutions.map((sol) => {
-      const solProjects = projects.filter((p) => (p.solutionId || "dltm") === sol.id);
+      const solProjects = projects.filter((p) => p.solutionId === sol.id);
       const activeCount = solProjects.filter(
         (p) => p.stage !== "PAUSED" && p.stage !== "DISPATCHED"
       ).length;
@@ -87,7 +96,6 @@ export function GovCrossSolutionMatrix() {
 
   return (
     <div className="space-y-4">
-      {/* Executive Portfolio Coverage Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {solutionStats.map((sol) => (
           <div
@@ -100,30 +108,26 @@ export function GovCrossSolutionMatrix() {
           >
             <div className="flex items-center justify-between">
               <span
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
-                style={{
-                  borderColor: `${sol.colorHex}40`,
-                  color: sol.colorHex,
-                  backgroundColor: `${sol.colorHex}15`,
-                }}
-              >
-                {sol.shortName}
-              </span>
-              <span className="text-[11px] font-bold text-foreground">
-                {sol.activeCount}/34 Tỉnh
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: sol.colorHex }}
+              />
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">
+                {sol.code}
               </span>
             </div>
 
             <div>
-              <div className="text-xs font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                {sol.name}
+              <div className="font-bold text-xs text-foreground group-hover:text-primary transition-colors flex items-center justify-between">
+                <span>{sol.name}</span>
+                <span className="text-[11px] font-mono text-primary font-bold">
+                  {sol.activeCount}/34
+                </span>
               </div>
               <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
                 {sol.targetGovDepartment}
               </div>
             </div>
 
-            {/* Progress bar */}
             <div className="space-y-1 pt-1">
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>Tiến độ hợp tác</span>
@@ -140,7 +144,6 @@ export function GovCrossSolutionMatrix() {
         ))}
       </div>
 
-      {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-xl border border-border/70 bg-card">
         <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -182,7 +185,6 @@ export function GovCrossSolutionMatrix() {
         </div>
       </div>
 
-      {/* Comprehensive Matrix Table */}
       <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
@@ -211,7 +213,6 @@ export function GovCrossSolutionMatrix() {
             </thead>
             <tbody className="divide-y divide-border/60">
               {filteredProvinces.map((prov, index) => {
-                // Calculate province coverage rate across solutions
                 let activeSolCount = 0;
                 let completedSolCount = 0;
 
@@ -258,7 +259,6 @@ export function GovCrossSolutionMatrix() {
                       {prov.region}
                     </td>
 
-                    {/* Solutions cells */}
                     {solutions.map((sol) => {
                       const proj = projectMap.get(`${prov.code}_${sol.id}`);
                       const stageKey = (proj?.stage || "DISPATCHED") as DltmStage;
@@ -289,7 +289,6 @@ export function GovCrossSolutionMatrix() {
                       );
                     })}
 
-                    {/* Coverage rate badge */}
                     <td className="py-3 px-4 text-center">
                       <div className="inline-flex items-center gap-1.5">
                         <div className="w-12 h-1.5 rounded-full bg-muted overflow-hidden">
@@ -310,10 +309,9 @@ export function GovCrossSolutionMatrix() {
                       </div>
                     </td>
 
-                    {/* Action button */}
                     <td className="py-3 px-3 text-center">
                       <button
-                        onClick={() => handleCellClick(prov.code, "dltm")}
+                        onClick={() => handleCellClick(prov.code, solutions[0]?.id || "")}
                         className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                         title="Xem chi tiết tỉnh"
                       >
@@ -332,4 +330,3 @@ export function GovCrossSolutionMatrix() {
 }
 
 export const DltmCrossSolutionMatrix = GovCrossSolutionMatrix;
-

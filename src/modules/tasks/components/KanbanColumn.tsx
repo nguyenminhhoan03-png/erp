@@ -6,8 +6,8 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
-import { Task, TaskStatus } from "../types";
+import { Plus, Loader2 } from "lucide-react";
+import { CustomTaskStatus, Task, TaskStatus } from "../types";
 import { TASK_STATUS_CONFIG } from "../constants";
 import { TaskCard } from "./TaskCard";
 import { Badge } from "@/shared/components/ui/badge";
@@ -15,18 +15,30 @@ import { cn } from "@/lib/utils";
 
 interface KanbanColumnProps {
   status: TaskStatus;
+  customStatus?: CustomTaskStatus;
   tasks: Task[];
+  isLoadingMore?: boolean;
+  hasMore?: boolean;
   onTaskClick: (task: Task) => void;
   onAddTask?: (status: TaskStatus) => void;
+  onScrollBottom?: () => void;
 }
 
-export function KanbanColumn({
+export const KanbanColumn = React.memo(function KanbanColumnComponent({
   status,
+  customStatus,
   tasks,
+  isLoadingMore = false,
+  hasMore = true,
   onTaskClick,
   onAddTask,
+  onScrollBottom,
 }: KanbanColumnProps) {
   const config = TASK_STATUS_CONFIG[status];
+  const label = customStatus?.name || config?.label || status;
+  const dotClass = config?.dotColor;
+  const customColor = customStatus?.color;
+
   const { setNodeRef, isOver } = useDroppable({
     id: status,
     data: {
@@ -36,6 +48,39 @@ export function KanbanColumn({
   });
 
   const taskIds = React.useMemo(() => tasks.map((t) => t.id), [tasks]);
+  const observerRef = React.useRef<HTMLDivElement>(null);
+  const onScrollBottomRef = React.useRef(onScrollBottom);
+
+  React.useEffect(() => {
+    onScrollBottomRef.current = onScrollBottom;
+  }, [onScrollBottom]);
+
+  // Kích hoạt load thêm khi cuộn đến sentinel ở đáy cột
+  React.useEffect(() => {
+    if (!observerRef.current) return;
+    if (tasks.length < 5 || hasMore === false || isLoadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore) {
+          onScrollBottomRef.current?.();
+        }
+      },
+      { rootMargin: "120px" }
+    );
+
+    observer.observe(observerRef.current);
+    return () => observer.disconnect();
+  }, [tasks.length, hasMore, isLoadingMore]);
+
+  // Bổ sung listener trực tiếp trên scroll container để phản hồi ngay lập tức
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (isLoadingMore || hasMore === false) return;
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 80) {
+      onScrollBottomRef.current?.();
+    }
+  };
 
   return (
     <div
@@ -49,9 +94,12 @@ export function KanbanColumn({
       {/* Column Header */}
       <div className="flex items-center justify-between pb-3 px-1">
         <div className="flex items-center gap-2">
-          <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", config.dotColor)} />
+          <span
+            className={cn("w-2.5 h-2.5 rounded-full shrink-0", dotClass)}
+            style={!dotClass && customColor ? { backgroundColor: customColor } : undefined}
+          />
           <h3 className="font-semibold text-sm text-foreground tracking-tight">
-            {config.label}
+            {label}
           </h3>
           <Badge
             variant="secondary"
@@ -74,7 +122,10 @@ export function KanbanColumn({
       </div>
 
       {/* Task List Container */}
-      <div className="flex-1 overflow-y-auto space-y-2.5 min-h-[150px] pr-0.5">
+      <div
+        onScroll={handleScroll}
+        className="flex-1 space-y-2.5 min-h-[150px] max-h-[calc(100vh-230px)] overflow-y-auto pr-1 scroll-smooth"
+      >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
             <TaskCard
@@ -103,7 +154,31 @@ export function KanbanColumn({
             </span>
           </div>
         )}
+
+        {/* Loading Spinner xoay tròn khi đang cuộn tải thêm */}
+        {isLoadingMore && (
+          <div className="py-2.5 px-3 flex items-center justify-center gap-2 text-xs text-muted-foreground bg-card/80 backdrop-blur-xs rounded-xl border border-border/70 shadow-2xs my-1 animate-in fade-in zoom-in-95 duration-200">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="font-medium text-[11px] text-foreground/85">Đang tải thêm công việc...</span>
+          </div>
+        )}
+
+        {/* Thông báo đã tải hết danh sách */}
+        {!isLoadingMore && hasMore === false && tasks.length >= 10 && (
+          <div className="py-2 text-center text-[10px] text-muted-foreground/50 select-none">
+            Đã tải hết {tasks.length} công việc
+          </div>
+        )}
+        
+        {/* Intersection Observer Sentinel */}
+        <div ref={observerRef} className="h-2 w-full pointer-events-none" />
       </div>
     </div>
   );
-}
+}, (prev, next) => {
+  return prev.tasks === next.tasks && 
+         prev.status === next.status && 
+         prev.customStatus === next.customStatus &&
+         prev.isLoadingMore === next.isLoadingMore &&
+         prev.hasMore === next.hasMore;
+});

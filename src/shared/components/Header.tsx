@@ -5,13 +5,12 @@ import { RoleSwitcher } from "./RoleSwitcher";
 import { UserMenu } from "./UserMenu";
 import { useUserStore } from "../store/useUserStore";
 import { useSidebarStore } from "../store/useSidebarStore";
-import { MOCK_DEPARTMENTS } from "../mock/departments";
 import { Badge } from "./ui/badge";
 
 export function Header() {
-  const { currentUser } = useUserStore();
+  const { currentUser, departments } = useUserStore();
   const { toggleSidebar } = useSidebarStore();
-  const currentDept = MOCK_DEPARTMENTS.find((d) => d.id === currentUser.departmentId);
+  const currentDept = departments.find((d) => d.id === currentUser.departmentId);
 
   // Lắng nghe phím tắt Ctrl+B để đóng mở sidebar
   React.useEffect(() => {
@@ -45,7 +44,7 @@ export function Header() {
 
         <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-full border border-border/60">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Hệ thống ERP Demo • Frontend Mock</span>
+          <span>Hệ thống ERP Doanh Nghiệp IGB</span>
         </div>
       </div>
 

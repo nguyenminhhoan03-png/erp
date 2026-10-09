@@ -12,23 +12,20 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useGovStore } from "../store/govStore";
-import { Plus, Sparkles, Building2 } from "lucide-react";
+import { Sparkles, Building2, Layers } from "lucide-react";
 
-export interface GovCreateSolutionModalProps {
+interface GovCreateSolutionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
-export type DltmCreateSolutionModalProps = GovCreateSolutionModalProps;
 
 const COLOR_PRESETS = [
-  { name: "Blue Ocean", hex: "#3b82f6", class: "bg-blue-500/10 text-blue-600 border-blue-500/30" },
-  { name: "Emerald Green", hex: "#10b981", class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
-  { name: "Rose Ruby", hex: "#ef4444", class: "bg-rose-500/10 text-rose-600 border-rose-500/30" },
-  { name: "Purple Royal", hex: "#8b5cf6", class: "bg-purple-500/10 text-purple-600 border-purple-500/30" },
-  { name: "Amber Sun", hex: "#f59e0b", class: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
-  { name: "Cyan Tech", hex: "#06b6d4", class: "bg-cyan-500/10 text-cyan-600 border-cyan-500/30" },
-  { name: "Indigo Night", hex: "#6366f1", class: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30" },
-  { name: "Teal Modern", hex: "#14b8a6", class: "bg-teal-500/10 text-teal-600 border-teal-500/30" },
+  { hex: "#8b5cf6", class: "bg-purple-100 text-purple-700" },
+  { hex: "#06b6d4", class: "bg-cyan-100 text-cyan-700" },
+  { hex: "#10b981", class: "bg-emerald-100 text-emerald-700" },
+  { hex: "#f59e0b", class: "bg-amber-100 text-amber-700" },
+  { hex: "#ec4899", class: "bg-pink-100 text-pink-700" },
+  { hex: "#6366f1", class: "bg-indigo-100 text-indigo-700" },
 ];
 
 export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolutionModalProps) {
@@ -40,7 +37,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-generate code from name
   const generateCode = (str: string) => {
     const words = str.trim().split(/\s+/);
     const initials = words.map((w) => w[0]).join("").toUpperCase();
@@ -54,7 +50,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
     setIsSubmitting(true);
 
     const code = generateCode(name);
-    // Tự động chọn ngẫu nhiên màu nhận diện đẹp từ danh sách preset
     const randomColor = COLOR_PRESETS[Math.floor(Math.random() * COLOR_PRESETS.length)];
 
     addDigitalSolution({
@@ -73,7 +68,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
     setIsSubmitting(false);
     onOpenChange(false);
 
-    // Reset form
     setName("");
     setTargetDepartment("");
     setDataAssetDescription("");
@@ -100,7 +94,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {/* Project Name */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">
               Tên dự án CĐS <span className="text-rose-500">*</span>
@@ -114,7 +107,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
             />
           </div>
 
-          {/* Target Gov Department */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-primary" />
@@ -129,7 +121,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
             />
           </div>
 
-          {/* Data asset description */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">
               Tài nguyên & Dữ liệu chuyên ngành cần số hóa (tùy chọn)
@@ -142,7 +133,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
             />
           </div>
 
-          {/* Description */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">
               Mô tả mục tiêu dự án (tùy chọn)
@@ -156,7 +146,6 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
             />
           </div>
 
-          {/* Thông tin xác nhận */}
           <div className="p-3 rounded-xl border border-primary/20 bg-primary/5 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
@@ -181,11 +170,10 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
             <Button
               type="submit"
               size="sm"
-              disabled={isSubmitting || !name || !targetDepartment}
-              className="gap-1.5"
+              disabled={isSubmitting || !name.trim() || !targetDepartment.trim()}
+              className="font-semibold text-xs"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Khởi tạo & Kích hoạt 34 Tỉnh</span>
+              {isSubmitting ? "Đang tạo..." : "Khởi tạo dự án CĐS"}
             </Button>
           </DialogFooter>
         </form>
@@ -195,4 +183,3 @@ export function GovCreateSolutionModal({ open, onOpenChange }: GovCreateSolution
 }
 
 export const DltmCreateSolutionModal = GovCreateSolutionModal;
-

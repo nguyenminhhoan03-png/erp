@@ -1,6 +1,14 @@
 import { clearToken, getToken } from "./auth-token";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api";
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== "undefined" && window.location.hostname) {
+    return `http://${window.location.hostname}:8000/api`;
+  }
+  return "http://127.0.0.1:8000/api";
+}
 
 export class ApiError extends Error {
   status: number;
@@ -24,17 +32,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const { method = "GET", body, auth = true } = options;
   const headers: Record<string, string> = { Accept: "application/json" };
 
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !isFormData) headers["Content-Type"] = "application/json";
 
   const token = getToken();
   if (auth && token) headers.Authorization = `Bearer ${token}`;
 
   let response: Response;
+  const baseUrl = getBaseUrl();
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${baseUrl}${path}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? (isFormData ? (body as BodyInit) : JSON.stringify(body)) : undefined,
     });
   } catch {
     throw new ApiError("Không thể kết nối tới máy chủ. Vui lòng thử lại sau", 0);
