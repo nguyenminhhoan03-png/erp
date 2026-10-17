@@ -115,7 +115,6 @@ export function ProjectDetailHeader({
         </div>
       </div>
 
-      {/* Tiến trình vòng đời dự án & Stepper */}
       <div className="mt-4 pt-3 border-t border-border/60">
         <div className="flex items-center justify-between text-[11px] mb-2">
           <span className="font-semibold text-muted-foreground uppercase tracking-wider">

@@ -424,9 +424,7 @@ export function GovTableView() {
           </table>
         </div>
 
-        {/* Thanh điều khiển phân trang */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-border/60 bg-muted/20 text-xs">
-          {/* Thông tin số lượng hiển thị */}
           <div className="flex items-center gap-2 text-muted-foreground">
             <span>
               {totalItems === 0 ? (
@@ -459,7 +457,6 @@ export function GovTableView() {
             </span>
           </div>
 
-          {/* Điều khiển phân trang & Tùy chọn số dòng mỗi trang */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <span className="text-[11px]">Số dòng:</span>
@@ -504,7 +501,6 @@ export function GovTableView() {
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
 
-                {/* Các nút số trang */}
                 <div className="flex items-center gap-1 px-1">
                   {getPageNumbers(safeCurrentPage, totalPages).map((p, idx) =>
                     p === "..." ? (

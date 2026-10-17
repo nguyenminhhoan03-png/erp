@@ -28,9 +28,13 @@ export interface User {
   email: string;
   avatar: string;
   role: Role;
+  roleName?: string | null;
   departmentId: DepartmentId;
+  departmentName?: string | null;
   title: string;
-  phone?: string;
+  phone?: string | null;
+  isSuperAdmin?: boolean;
+  permissions?: string[];
 }
 
 export type Action =
@@ -47,6 +51,4 @@ export type Action =
 export type Resource =
   | "task"
   | "task_self"
-  | "daily_report"
-  | "statistics"
-  | "approvals";
+  | "daily_report";

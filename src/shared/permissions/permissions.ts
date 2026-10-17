@@ -1,44 +1,32 @@
 import { Role, RoleConfig } from "../types";
 
-/**
- * Danh mục Fine-grained Permissions (Chuẩn Laravel Spatie / Enterprise RBAC)
- * Quy tắc đặt tên: {module}:{action}
- */
 export type PermissionKey =
-  // 1. Phân hệ Công việc (Task Management)
   | "tasks:view"
   | "tasks:create"
-  | "tasks:assign_all"        // Giao việc cho bất kỳ ai / cả phòng
-  | "tasks:assign_self"       // Tự gán việc cho bản thân
-  | "tasks:approve"           // Phê duyệt đề xuất task
-  | "tasks:verify"            // Nghiệm thu hoàn thành (Done)
+  | "tasks:assign_all"        
+  | "tasks:assign_self"       
+  | "tasks:approve"           
+  | "tasks:verify"            
   | "tasks:edit"
   | "tasks:delete"
-  | "tasks:export"            // Xuất file Excel / CSV danh sách công việc
+  | "tasks:export"            
   
-  // 2. Phân hệ Báo cáo ngày (Daily Report)
-  | "reports:submit"          // Nộp báo cáo ngày
-  | "reports:view_department" // Xem báo cáo toàn phòng ban
-  | "reports:view_company"    // Xem báo cáo toàn công ty
-  | "reports:export"          // Xuất file tổng hợp chấm công & báo cáo
+  | "reports:submit"          
+  | "reports:view_department" 
+  | "reports:view_company"    
+  | "reports:export"          
   
-  // 3. Phân hệ Nhân sự (HRM)
   | "employees:view"
   | "employees:create"
   | "employees:delete"
-  | "employees:edit_role"     // Thay đổi chức danh & phân bổ quyền
+  | "employees:edit_role"     
   
-  // 4. Phân hệ Thống kê & Báo cáo (Analytics)
   | "analytics:view_company"
   | "analytics:view_department"
   | "analytics:view_own"
 
-  // 5. Cấu hình hệ thống (System Settings)
-  | "settings:manage";        // Thiết lập quy trình, deadline, cấu hình ERP
+  | "settings:manage";        
 
-/**
- * Phạm vi dữ liệu (Data Scope - ABAC Engine)
- */
 export type DataScope = "GLOBAL" | "DEPARTMENT" | "OWN";
 
 export interface PermissionDefinition {
@@ -49,7 +37,6 @@ export interface PermissionDefinition {
 }
 
 export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
-  // Task Module
   {
     key: "tasks:view",
     module: "TASKS",
@@ -105,7 +92,6 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Xuất file Excel/CSV danh sách công việc và tiến độ sprint",
   },
 
-  // Daily Report Module
   {
     key: "reports:submit",
     module: "REPORTS",
@@ -131,7 +117,6 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Tải file tổng hợp giờ làm và công việc để đối soát lương",
   },
 
-  // HRM Module
   {
     key: "employees:view",
     module: "HRM",
@@ -157,7 +142,6 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Nâng hạ cấp bậc, chuyển đổi vai trò nhân sự và phân bổ quyền",
   },
 
-  // Analytics Module
   {
     key: "analytics:view_company",
     module: "ANALYTICS",
@@ -177,7 +161,6 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: "Xem số liệu task và KPI của chính bản thân",
   },
 
-  // System Settings Module
   {
     key: "settings:manage",
     module: "SYSTEM",
@@ -225,10 +208,6 @@ export const DEFAULT_ROLE_CONFIGS: RoleConfig[] = [
   },
 ];
 
-/**
- * Cấu hình Phân quyền mặc định theo Vai trò (Role-Permission Mapping)
- * Dễ dàng tùy biến hoặc đồng bộ từ Database Laravel
- */
 export const ROLE_PERMISSIONS: Record<
   string,
   {

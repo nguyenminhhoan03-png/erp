@@ -1,11 +1,5 @@
 import { TaskPriority, TaskResolution, TaskStatus, TaskProject } from "./types";
 
-/**
- * CẤU HÌNH HỆ THỐNG:
- * REQUIRE_SELF_TASK_APPROVAL: Khi nhân viên tự tạo task cho chính mình,
- * - true: Task vào trạng thái PENDING_APPROVAL (Chờ duyệt). Trưởng phòng hoặc Admin phải duyệt.
- * - false: Task vào thẳng trạng thái TODO (Cần làm).
- */
 export const REQUIRE_SELF_TASK_APPROVAL = true;
 
 export interface StatusConfig {
@@ -19,10 +13,10 @@ export interface StatusConfig {
   description: string;
 }
 
-export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
+const BASE_TASK_STATUS_CONFIG: Record<string, StatusConfig> = {
   PENDING_APPROVAL: {
     id: "PENDING_APPROVAL",
-    label: "Pending Approval",
+    label: "Chờ phê duyệt",
     color: "#f59e0b",
     badgeBg: "bg-amber-50 dark:bg-amber-950/50",
     badgeText: "text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700 font-medium",
@@ -32,7 +26,7 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
   },
   TODO: {
     id: "TODO",
-    label: "To Do",
+    label: "Cần làm",
     color: "#64748b",
     badgeBg: "bg-slate-100 dark:bg-slate-800/80",
     badgeText: "text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 font-medium",
@@ -42,7 +36,7 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
   },
   IN_PROGRESS: {
     id: "IN_PROGRESS",
-    label: "In Progress",
+    label: "Đang làm",
     color: "#2563eb",
     badgeBg: "bg-blue-50 dark:bg-blue-950/50",
     badgeText: "text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 font-medium",
@@ -52,7 +46,7 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
   },
   IN_REVIEW: {
     id: "IN_REVIEW",
-    label: "In Review",
+    label: "Đánh giá",
     color: "#9333ea",
     badgeBg: "bg-purple-50 dark:bg-purple-950/50",
     badgeText: "text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 font-medium",
@@ -62,7 +56,7 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
   },
   DONE: {
     id: "DONE",
-    label: "Done",
+    label: "Hoàn thành",
     color: "#16a34a",
     badgeBg: "bg-emerald-50 dark:bg-emerald-950/50",
     badgeText: "text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-medium",
@@ -72,7 +66,7 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
   },
   CANCELLED: {
     id: "CANCELLED",
-    label: "Closed / Cancelled",
+    label: "Đã hủy / Đóng",
     color: "#64748b",
     badgeBg: "bg-slate-100 dark:bg-slate-850",
     badgeText: "text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 font-medium",
@@ -81,6 +75,42 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
     description: "Closed or cancelled task (Won't Fix, Not a Bug, Duplicate...)",
   },
 };
+
+export function getStatusConfig(statusKey: string, customName?: string, customColor?: string): StatusConfig {
+  if (statusKey && BASE_TASK_STATUS_CONFIG[statusKey]) {
+    const base = BASE_TASK_STATUS_CONFIG[statusKey];
+    if (customName || customColor) {
+      return {
+        ...base,
+        label: customName || base.label,
+        color: customColor || base.color,
+      };
+    }
+    return base;
+  }
+  return {
+    id: (statusKey || "TODO") as TaskStatus,
+    label: customName || statusKey || "Chưa phân loại",
+    color: customColor || "#64748b",
+    badgeBg: "bg-slate-100 dark:bg-slate-800/80",
+    badgeText: "text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 font-medium",
+    dotColor: "bg-slate-500",
+    borderColor: "border-slate-300 dark:border-slate-800",
+    description: customName || statusKey || "Trạng thái công việc",
+  };
+}
+
+export const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = new Proxy(BASE_TASK_STATUS_CONFIG as any, {
+  get(target, prop) {
+    if (typeof prop === "string" && prop in target) {
+      return target[prop];
+    }
+    if (typeof prop === "string" && prop !== "toJSON" && prop !== "$$typeof") {
+      return getStatusConfig(prop);
+    }
+    return (target as any)[prop];
+  },
+});
 
 export interface ResolutionConfig {
   id: TaskResolution;
@@ -178,16 +208,11 @@ export const TASK_PRIORITY_CONFIG: Record<TaskPriority, PriorityConfig> = {
   },
 };
 
-// Thứ tự các cột mặc định trên bảng Kanban (chuẩn Jira Scrum/Kanban đầy đủ 6 cột)
 export const KANBAN_COLUMNS: TaskStatus[] = [
-  "PENDING_APPROVAL",
   "TODO",
   "IN_PROGRESS",
   "IN_REVIEW",
   "DONE",
   "CANCELLED",
 ];
-
-
-
 

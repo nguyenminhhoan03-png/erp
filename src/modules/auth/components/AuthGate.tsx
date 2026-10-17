@@ -24,6 +24,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       .then((user) => {
         if (cancelled) return;
         setCurrentUser(toStoreUser(user));
+        useUserStore.getState().fetchDepartments().catch(() => {});
+        useUserStore.getState().fetchUsers().catch(() => {});
         setReady(true);
       })
       .catch(() => {

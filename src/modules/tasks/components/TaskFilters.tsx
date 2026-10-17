@@ -38,13 +38,16 @@ export function TaskFilters() {
     openCreate,
     openWorkflowConfig,
     projects,
+    statuses,
+    fetchProjects,
   } = useTaskStore();
   const { currentUser, users, departments, fetchUsers, fetchDepartments } = useUserStore();
 
   React.useEffect(() => {
     fetchUsers();
     fetchDepartments();
-  }, []);
+    fetchProjects();
+  }, [fetchUsers, fetchDepartments, fetchProjects]);
 
   const [searchTerm, setSearchTerm] = React.useState(filters.search || "");
 
@@ -73,9 +76,14 @@ export function TaskFilters() {
     });
   };
 
+  const isDefaultProject =
+    viewMode === "kanban"
+      ? !filters.projectId || filters.projectId === projects[0]?.id
+      : !filters.projectId || filters.projectId === "ALL";
+
   const isFiltered =
     Boolean(filters.search) ||
-    (filters.projectId && filters.projectId !== "ALL") ||
+    !isDefaultProject ||
     filters.departmentId !== "ALL" ||
     filters.assigneeId !== "ALL" ||
     filters.priority !== "ALL" ||
@@ -84,7 +92,6 @@ export function TaskFilters() {
 
   return (
     <div className="flex flex-col gap-3.5 mb-6">
-      {/* Top Bar: Search, View Mode, New Task Button */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 flex-1 min-w-[260px] max-w-md">
           <div className="relative w-full">
@@ -99,7 +106,6 @@ export function TaskFilters() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* My Tasks quick filter button */}
           <Button
             variant={filters.isMyTasksOnly ? "default" : "outline"}
             size="sm"
@@ -110,7 +116,6 @@ export function TaskFilters() {
             <span>Task của tôi</span>
           </Button>
 
-          {/* Kanban / Table Switcher */}
           <div className="flex items-center rounded-xl bg-muted/60 p-1 border border-border/80">
             <button
               onClick={() => setViewMode("kanban")}
@@ -140,12 +145,11 @@ export function TaskFilters() {
             </button>
           </div>
 
-          {/* Workflow Config Button */}
           {viewMode === "kanban" && (
             <Button
               variant="outline"
               size="sm"
-              onClick={openWorkflowConfig}
+              onClick={() => openWorkflowConfig(filters.projectId !== "ALL" ? filters.projectId : undefined)}
               className="h-9 rounded-xl gap-1.5 border-border/80 hover:bg-muted/60"
               title="Cấu hình quy trình & cột Kanban chuẩn Jira"
             >
@@ -154,9 +158,8 @@ export function TaskFilters() {
             </Button>
           )}
 
-          {/* Create Task Button */}
           <Button
-            onClick={openCreate}
+            onClick={() => openCreate("TODO", filters.projectId !== "ALL" ? filters.projectId : undefined)}
             size="sm"
             className="h-9 rounded-xl gap-1.5 shadow-sm shadow-primary/25"
           >
@@ -166,30 +169,43 @@ export function TaskFilters() {
         </div>
       </div>
 
-      {/* Filter Selectors Bar */}
       <div className="flex flex-wrap items-center gap-2.5 text-xs">
-        {/* Project Filter (Chuẩn Enterprise Multi-Project) */}
-        <div className="w-[210px]">
+        <div className="w-[230px]">
           <Select
-            value={filters.projectId || "ALL"}
+            value={
+              viewMode === "kanban"
+                ? (filters.projectId && filters.projectId !== "ALL" ? filters.projectId : (projects[0]?.id || ""))
+                : (filters.projectId || "ALL")
+            }
             onValueChange={(val) => setFilters({ projectId: val })}
           >
             <SelectTrigger className="h-8.5 rounded-lg bg-card/60 text-xs border-primary/30 font-medium">
               <div className="flex items-center gap-1.5 truncate">
-                <Briefcase className="h-3.5 w-3.5 text-primary shrink-0" />
                 <SelectValue placeholder="Dự án">
-                  {!filters.projectId || filters.projectId === "ALL"
-                    ? "Tất cả dự án"
-                    : projects.find((p) => p.id === filters.projectId)?.name}
+                  {viewMode === "kanban"
+                    ? (() => {
+                        const p = projects.find((item) => item.id === (filters.projectId || projects[0]?.id));
+                        if (!p) return "Chọn dự án";
+                        return p.code ? `[${p.code}] ${p.name}` : p.name;
+                      })()
+                    : (!filters.projectId || filters.projectId === "ALL"
+                      ? "Tất cả dự án"
+                      : (() => {
+                          const p = projects.find((item) => item.id === filters.projectId);
+                          if (!p) return "Chọn dự án";
+                          return p.code ? `[${p.code}] ${p.name}` : p.name;
+                        })())}
                 </SelectValue>
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">
-                <div className="flex items-center gap-1.5 font-semibold">
-                  <span>🌐 Tất cả dự án</span>
-                </div>
-              </SelectItem>
+              {viewMode !== "kanban" && (
+                <SelectItem value="ALL">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <span>Tất cả dự án</span>
+                  </div>
+                </SelectItem>
+              )}
               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
                 Dự án Nội bộ
               </div>
@@ -236,7 +252,6 @@ export function TaskFilters() {
           </Select>
         </div>
 
-        {/* Department Filter */}
         <div className="w-[170px]">
           <Select
             value={filters.departmentId || "ALL"}
@@ -262,7 +277,6 @@ export function TaskFilters() {
           </Select>
         </div>
 
-        {/* Assignee Filter */}
         <div className="w-[170px]">
           <Select
             value={filters.assigneeId || "ALL"}
@@ -286,7 +300,6 @@ export function TaskFilters() {
           </Select>
         </div>
 
-        {/* Status Filter */}
         <div className="w-[175px]">
           <Select
             value={filters.status || "ALL"}
@@ -298,15 +311,31 @@ export function TaskFilters() {
               <SelectValue placeholder="Trạng thái">
                 {!filters.status || filters.status === "ALL"
                   ? "Tất cả trạng thái"
-                  : TASK_STATUS_CONFIG[filters.status as TaskStatus]?.label}
+                  : (statuses?.find((s) => s.key === filters.status)?.name ||
+                     TASK_STATUS_CONFIG[filters.status as TaskStatus]?.label ||
+                     filters.status)}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
-              {Object.values(TASK_STATUS_CONFIG).map((st) => (
+              {(statuses && statuses.length > 0
+                ? statuses.map((s) => ({
+                    id: s.key,
+                    label: s.name,
+                    color: s.color,
+                  }))
+                : Object.values(TASK_STATUS_CONFIG).map((s) => ({
+                    id: s.id,
+                    label: s.label,
+                    color: s.color,
+                  }))
+              ).map((st) => (
                 <SelectItem key={st.id} value={st.id}>
                   <div className="flex items-center gap-1.5">
-                    <span className={cn("w-2 h-2 rounded-full", st.dotColor)} />
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: st.color || "#2563eb" }}
+                    />
                     <span>{st.label}</span>
                   </div>
                 </SelectItem>
@@ -315,7 +344,6 @@ export function TaskFilters() {
           </Select>
         </div>
 
-        {/* Priority Filter */}
         <div className="w-[140px]">
           <Select
             value={filters.priority || "ALL"}
@@ -341,7 +369,6 @@ export function TaskFilters() {
           </Select>
         </div>
 
-        {/* Reset Filter Button */}
         {isFiltered && (
           <Button
             variant="ghost"

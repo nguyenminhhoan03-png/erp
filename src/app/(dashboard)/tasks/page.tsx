@@ -13,7 +13,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Button } from "@/shared/components/ui/button";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertCircle, RefreshCw, Layers, KanbanSquare, FileSpreadsheet, FileCheck2 } from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { Task } from "@/modules/tasks/types";
 
 const KanbanBoard = dynamic(
@@ -40,11 +40,11 @@ const KanbanBoard = dynamic(
 function TasksPageContent() {
   const {
     tasks,
+    statuses,
     isLoading,
     error,
     fetchTasks,
     setFilters,
-    resetToDefault,
     viewMode,
     openDetail,
     openCreate,
@@ -65,16 +65,16 @@ function TasksPageContent() {
     }
   }, [urlProjectId, fetchTasks, setFilters]);
 
+
+
   const handleTaskClick = (task: Task) => {
     openDetail(task);
   };
 
   return (
     <div className="flex flex-col h-full space-y-4">
-      {/* Filter and Control Bar */}
       <TaskFilters />
 
-      {/* Loading Skeleton State */}
       {isLoading && (
         <div className="flex gap-4 overflow-x-auto pb-4 pt-1">
           {Array.from({ length: 5 }).map((_, colIdx) => (
@@ -94,7 +94,6 @@ function TasksPageContent() {
         </div>
       )}
 
-      {/* Error State */}
       {!isLoading && error && (
         <div className="flex flex-col items-center justify-center p-10 rounded-2xl border border-rose-300 bg-rose-50/50 dark:bg-rose-950/20 text-center my-6">
           <AlertCircle className="h-10 w-10 text-rose-500 mb-3" />
@@ -116,53 +115,65 @@ function TasksPageContent() {
         </div>
       )}
 
-      {/* Empty State */}
-      {!isLoading && !error && tasks.length === 0 && (
-        <EmptyState
-          title="Không tìm thấy công việc nào"
-          description={
-            filters.search || filters.departmentId !== "ALL"
-              ? "Không có công việc nào khớp với tiêu chí tìm kiếm hoặc bộ lọc hiện tại."
-              : "Bộ nhớ tạm chưa có dữ liệu công việc. Hãy bấm nút dưới đây để nạp đầy đủ 40+ công việc mẫu."
+      {!isLoading && !error && viewMode === "kanban" && (
+        <KanbanBoard
+          onTaskClick={handleTaskClick}
+          onAddTask={(colStatus) =>
+            openCreate(colStatus, filters.projectId !== "ALL" ? filters.projectId : undefined)
           }
-          actionLabel="Khôi phục 40+ công việc mẫu"
-          onAction={resetToDefault}
         />
       )}
 
-      {/* Main Kanban or List Content */}
-      {!isLoading && !error && tasks.length > 0 && (
-        <>
-          {viewMode === "kanban" ? (
-            <KanbanBoard onTaskClick={handleTaskClick} onAddTask={() => openCreate()} />
-          ) : (
-            <div className="space-y-4 pb-6">
-              <TaskListView tasks={tasks} onTaskClick={handleTaskClick} />
-              {hasMore["ALL"] && (
-                <div className="flex justify-center pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => fetchMoreTasks()}
-                    disabled={isFetchingMore["ALL"]}
-                    className="w-full max-w-sm rounded-xl border-dashed bg-muted/30"
-                  >
-                    {isFetchingMore["ALL"] ? (
-                      <div className="flex items-center gap-2">
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>Đang tải thêm...</span>
-                      </div>
-                    ) : (
-                      "Tải thêm công việc"
-                    )}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </>
+      {!isLoading && !error && viewMode === "list" && tasks.length === 0 && (
+        <EmptyState
+          title={
+            filters.search || filters.departmentId !== "ALL"
+              ? "Không tìm thấy công việc nào"
+              : "Chưa có công việc nào"
+          }
+          description={
+            filters.search || filters.departmentId !== "ALL"
+              ? "Không có công việc nào khớp với tiêu chí tìm kiếm hoặc bộ lọc hiện tại."
+              : "Dự án hiện chưa có dữ liệu công việc. Hãy bắt đầu bằng cách tạo công việc mới."
+          }
+          actionLabel={
+            filters.search || filters.departmentId !== "ALL"
+              ? undefined
+              : "Tạo công việc mới"
+          }
+          onAction={
+            filters.search || filters.departmentId !== "ALL"
+              ? undefined
+              : () => openCreate("TODO", filters.projectId !== "ALL" ? filters.projectId : undefined)
+          }
+        />
       )}
 
-      {/* Dialogs */}
+      {!isLoading && !error && viewMode === "list" && tasks.length > 0 && (
+        <div className="space-y-4 pb-6">
+          <TaskListView tasks={tasks} onTaskClick={handleTaskClick} />
+          {hasMore["ALL"] && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                onClick={() => fetchMoreTasks()}
+                disabled={isFetchingMore["ALL"]}
+                className="w-full max-w-sm rounded-xl border-dashed bg-muted/30"
+              >
+                {isFetchingMore["ALL"] ? (
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Đang tải thêm...</span>
+                  </div>
+                ) : (
+                  "Tải thêm công việc"
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       <TaskDialog />
       <TaskFormDialog />
     </div>

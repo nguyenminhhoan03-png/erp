@@ -14,12 +14,24 @@ export function formatDateTime(date: string | Date | null | undefined): string {
 export function formatRelativeTime(date: string | Date | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? parseISO(date) : date;
-  return formatDistanceToNow(d, { addSuffix: true, locale: vi });
+  return formatDistanceToNow(d, { addSuffix: true, locale: vi })
+    .replace(/^khoảng\s+/i, "")
+    .replace(/^dưới\s+/i, "");
 }
 
-export function isOverdue(deadline: string | Date | null | undefined, status?: string): boolean {
+export function isOverdue(
+  deadline: string | Date | null | undefined,
+  statusOrClosed?: string | boolean | null,
+  closedAt?: string | Date | null
+): boolean {
   if (!deadline) return false;
-  if (status === "DONE" || status === "CANCELLED") return false;
+  if (closedAt) return false;
+  if (typeof statusOrClosed === "boolean") {
+    if (statusOrClosed) return false;
+  } else if (statusOrClosed) {
+    const s = String(statusOrClosed).toUpperCase();
+    if (s === "DONE" || s === "CANCELLED" || s === "CLOSED") return false;
+  }
   const d = typeof deadline === "string" ? parseISO(deadline) : deadline;
   return isBefore(startOfDay(d), startOfDay(new Date()));
 }

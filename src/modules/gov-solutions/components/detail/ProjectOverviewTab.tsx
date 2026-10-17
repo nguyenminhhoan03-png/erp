@@ -88,7 +88,6 @@ export function ProjectOverviewTab({
   return (
     <div className="p-5 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Thông tin đầu mối lãnh đạo */}
         <div className="p-4 rounded-xl border border-border/80 bg-card/60 space-y-3">
           <div className="flex items-center justify-between pb-1">
             <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -207,7 +206,6 @@ export function ProjectOverviewTab({
           )}
         </div>
 
-        {/* Ghi chú chi tiết & định hướng */}
         <div className="p-4 rounded-xl border border-border/80 bg-card/60 space-y-2.5 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-1">
@@ -251,14 +249,13 @@ export function ProjectOverviewTab({
         </div>
       </div>
 
-      {/* Danh sách các buổi hẹn làm việc của tỉnh */}
       <div className="p-4 rounded-xl border border-border/80 bg-card/60 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border/60">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5 text-primary" />
-                <span>Danh sách lịch hẹn với địa phương ({meetings.length})</span>
+                <span>Danh sách lịch hẹn ({meetings.length})</span>
               </h4>
               {upcomingMeetings.length > 0 && (
                 <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30">
@@ -328,7 +325,6 @@ export function ProjectOverviewTab({
                         {isUpcoming ? "Sắp tới" : isDone ? "Đã hoàn thành" : "Đã hủy"}
                       </Badge>
 
-                      {/* Badge Giai đoạn dự án */}
                       {Boolean(m.stageId) && (
                         <Badge
                           variant="outline"

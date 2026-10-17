@@ -3,15 +3,162 @@ import { CustomTaskStatus, Task, TaskFilterParams, TaskResolution, TaskStatus } 
 import { taskService } from "../services/taskService";
 import { reportService } from "../services/reportService";
 import { taskStatusService } from "../services/taskStatusService";
-import { INITIAL_MOCK_TASKS } from "../mock-data";
 import { User } from "@/shared/types";
 import { checkTaskTransitionPermission } from "@/shared/permissions/can";
+
+const isTaskDone = (st: Task, statuses: CustomTaskStatus[]) => {
+  const sDef = statuses.find((s) => s.key === st.status);
+  if (sDef) {
+    return sDef.category === "DONE";
+  }
+  return st.status === "DONE" || st.status === "CANCELLED" || Boolean(st.closedAt);
+};
+
+const hydrateTaskSubtasks = (task: Task, allTasks: Task[], statuses: CustomTaskStatus[]): Task => {
+  const directSubtasks = task.subTasks || [];
+  const directIds = new Set(directSubtasks.map((st) => String(st.id)));
+  const storeSubtasks = allTasks.filter((t) => String(t.parentId) === String(task.id));
+  const mergedSubtasks = [
+    ...directSubtasks.map((st) => allTasks.find((t) => String(t.id) === String(st.id)) || st),
+    ...storeSubtasks.filter((st) => !directIds.has(String(st.id))),
+  ];
+  return {
+    ...task,
+    subTasks: mergedSubtasks,
+    subtasksCount: mergedSubtasks.length,
+    completedSubtasksCount: mergedSubtasks.filter((st) => isTaskDone(st, statuses)).length,
+  };
+};
+
+const syncTaskInCollection = (
+  tasks: Task[],
+  updatedTask: Task,
+  statuses: CustomTaskStatus[]
+): Task[] => {
+  const parentId = updatedTask.parentId || updatedTask.parent?.id;
+
+  return tasks.map((t) => {
+    if (t.id === updatedTask.id) {
+      return {
+        ...t,
+        ...updatedTask,
+      };
+    }
+
+    if (parentId && String(t.id) === String(parentId)) {
+      const currentSubtasks = t.subTasks || [];
+      const hasSubtask = currentSubtasks.some((st) => String(st.id) === String(updatedTask.id));
+      const nextSubtasks = hasSubtask
+        ? currentSubtasks.map((st) => (String(st.id) === String(updatedTask.id) ? { ...st, ...updatedTask } : st))
+        : [...currentSubtasks, updatedTask];
+      return {
+        ...t,
+        subTasks: nextSubtasks,
+        subtasksCount: nextSubtasks.length,
+        completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
+      };
+    }
+
+    if (t.subTasks && t.subTasks.some((st) => String(st.id) === String(updatedTask.id))) {
+      const nextSubtasks = t.subTasks.map((st) =>
+        String(st.id) === String(updatedTask.id) ? { ...st, ...updatedTask } : st
+      );
+      return {
+        ...t,
+        subTasks: nextSubtasks,
+        subtasksCount: nextSubtasks.length,
+        completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
+      };
+    }
+
+    return t;
+  });
+};
+
+const syncActiveTask = (
+  activeTask: Task | null,
+  updatedTask: Task,
+  statuses: CustomTaskStatus[]
+): Task | null => {
+  if (!activeTask) return null;
+
+  if (activeTask.id === updatedTask.id) {
+    return {
+      ...activeTask,
+      ...updatedTask,
+    };
+  }
+
+  const parentId = updatedTask.parentId || updatedTask.parent?.id;
+  const isParent =
+    (parentId && String(activeTask.id) === String(parentId)) ||
+    Boolean(activeTask.subTasks && activeTask.subTasks.some((st) => String(st.id) === String(updatedTask.id)));
+
+  if (isParent) {
+    const currentSubtasks = activeTask.subTasks || [];
+    const hasSubtask = currentSubtasks.some((st) => String(st.id) === String(updatedTask.id));
+    const nextSubtasks = hasSubtask
+      ? currentSubtasks.map((st) => (String(st.id) === String(updatedTask.id) ? { ...st, ...updatedTask } : st))
+      : [...currentSubtasks, updatedTask];
+    return {
+      ...activeTask,
+      subTasks: nextSubtasks,
+      subtasksCount: nextSubtasks.length,
+      completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
+    };
+  }
+
+  return activeTask;
+};
+
+const removeTaskFromCollection = (
+  tasks: Task[],
+  deletedId: string,
+  statuses: CustomTaskStatus[]
+): Task[] => {
+  return tasks
+    .filter((t) => String(t.id) !== String(deletedId))
+    .map((t) => {
+      if (t.subTasks && t.subTasks.some((st) => String(st.id) === String(deletedId))) {
+        const nextSubtasks = t.subTasks.filter((st) => String(st.id) !== String(deletedId));
+        return {
+          ...t,
+          subTasks: nextSubtasks,
+          subtasksCount: nextSubtasks.length,
+          completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
+        };
+      }
+      return t;
+    });
+};
+
+const removeTaskFromActive = (
+  activeTask: Task | null,
+  deletedId: string,
+  statuses: CustomTaskStatus[]
+): Task | null => {
+  if (!activeTask) return null;
+  if (String(activeTask.id) === String(deletedId)) return null;
+  if (activeTask.subTasks && activeTask.subTasks.some((st) => String(st.id) === String(deletedId))) {
+    const nextSubtasks = activeTask.subTasks.filter((st) => String(st.id) !== String(deletedId));
+    return {
+      ...activeTask,
+      subTasks: nextSubtasks,
+      subtasksCount: nextSubtasks.length,
+      completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
+    };
+  }
+  return activeTask;
+};
 
 interface TaskState {
   tasks: Task[];
   projects: import("../types").TaskProject[];
   statuses: CustomTaskStatus[];
   isWorkflowConfigOpen: boolean;
+  workflowConfigProjectId?: string;
+  createInitialStatus?: string;
+  createInitialProjectId?: string;
   isLoading: boolean;
   isFetchingMore: Record<string, boolean>;
   hasMore: Record<string, boolean>;
@@ -23,11 +170,10 @@ interface TaskState {
   isDetailOpen: boolean;
   isCreateOpen: boolean;
 
-  // Actions
   fetchTasks: () => Promise<void>;
   fetchProjects: () => Promise<void>;
-  fetchStatuses: (projectId?: string, departmentId?: string) => Promise<void>;
-  openWorkflowConfig: () => void;
+  fetchStatuses: (projectId?: string, departmentId?: string, systemOnly?: boolean) => Promise<void>;
+  openWorkflowConfig: (projectId?: string) => void;
   closeWorkflowConfig: () => void;
   addStatus: (data: {
     name: string;
@@ -37,7 +183,18 @@ interface TaskState {
     departmentId?: string;
   }) => Promise<CustomTaskStatus>;
   updateStatus: (id: string, updates: Partial<CustomTaskStatus>) => Promise<CustomTaskStatus>;
-  deleteStatus: (id: string, targetKey?: string) => Promise<boolean>;
+  deleteStatus: (id: string, targetKey?: string, projectId?: string) => Promise<boolean>;
+  syncStatuses: (data: {
+    projectId?: string;
+    departmentId?: string;
+    statuses: {
+      name: string;
+      category: "TODO" | "IN_PROGRESS" | "DONE";
+      color?: string;
+      key?: string;
+    }[];
+    migrateMap?: Record<string, string>;
+  }) => Promise<CustomTaskStatus[]>;
   reorderStatuses: (items: { id: number | string; order_index: number }[]) => Promise<boolean>;
   fetchMoreTasks: (status?: TaskStatus) => Promise<void>;
   setFilters: (newFilters: Partial<TaskFilterParams>) => void;
@@ -45,10 +202,9 @@ interface TaskState {
   setViewMode: (mode: "kanban" | "list") => void;
   openDetail: (task: Task) => void;
   closeDetail: () => void;
-  openCreate: () => void;
+  openCreate: (initialStatus?: string | unknown, initialProjectId?: string) => void;
   closeCreate: () => void;
 
-  // Task Mutations
   moveTask: (
     taskId: string,
     targetStatus: TaskStatus,
@@ -67,8 +223,10 @@ interface TaskState {
   createTask: (newTaskData: Parameters<typeof taskService.createTask>[0]) => Promise<Task>;
   updateTask: (id: string, updates: Partial<Task>) => Promise<Task>;
   deleteTask: (id: string) => Promise<boolean>;
-  approveTask: (taskId: string, approvedBy: User) => Promise<{ success: boolean; reason?: string }>;
-  rejectTask: (taskId: string, rejectedBy: User) => Promise<{ success: boolean; reason?: string }>;
+  createSubtask: (parentId: string, data: import("../types").CreateSubtaskInput) => Promise<Task>;
+  uploadAttachment: (taskId: string, file: File) => Promise<import("../types").TaskAttachment>;
+  uploadAttachments: (taskId: string, files: File[]) => Promise<import("../types").TaskAttachment[]>;
+  deleteAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   toggleChecklistItem: (taskId: string, itemId: string) => Promise<void>;
   addComment: (taskId: string, authorId: string, content: string) => Promise<void>;
   resetToDefault: () => Promise<void>;
@@ -79,6 +237,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   projects: [],
   statuses: [],
   isWorkflowConfigOpen: false,
+  workflowConfigProjectId: undefined,
+  createInitialStatus: undefined,
+  createInitialProjectId: undefined,
   isLoading: false,
   isFetchingMore: {},
   hasMore: {},
@@ -99,14 +260,16 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   isDetailOpen: false,
   isCreateOpen: false,
 
-  openWorkflowConfig: () => set({ isWorkflowConfigOpen: true }),
-  closeWorkflowConfig: () => set({ isWorkflowConfigOpen: false }),
+  openWorkflowConfig: (projectId?: string) =>
+    set({ isWorkflowConfigOpen: true, workflowConfigProjectId: projectId }),
+  closeWorkflowConfig: () =>
+    set({ isWorkflowConfigOpen: false, workflowConfigProjectId: undefined }),
 
-  fetchStatuses: async (projectId?: string, departmentId?: string) => {
+  fetchStatuses: async (projectId?: string, departmentId?: string, systemOnly?: boolean) => {
     try {
       const pId = projectId !== "ALL" ? projectId : undefined;
       const dId = departmentId !== "ALL" ? departmentId : undefined;
-      const statuses = await taskStatusService.getStatuses(pId, dId);
+      const statuses = await taskStatusService.getStatuses(pId, dId, systemOnly);
       set({ statuses });
     } catch (err) {
       console.warn("Lỗi khi tải statuses:", err);
@@ -127,18 +290,27 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     return updated;
   },
 
-  deleteStatus: async (id, targetKey) => {
-    const success = await taskStatusService.deleteStatus(id, targetKey);
+  deleteStatus: async (id, targetKey, projectId) => {
+    const pId = projectId || get().filters.projectId;
+    const success = await taskStatusService.deleteStatus(id, targetKey, pId);
     if (success) {
-      set((state) => ({
-        statuses: state.statuses.filter((s) => s.id !== id),
-        tasks: state.tasks.map((t) => {
-          const deleted = state.statuses.find((s) => s.id === id);
-          return deleted && t.status === deleted.key ? { ...t, status: targetKey || "TODO" } : t;
-        }),
-      }));
+      await get().fetchStatuses(pId, get().filters.departmentId);
+      await get().fetchTasks();
+      return true;
     }
-    return success;
+    return false;
+  },
+
+  syncStatuses: async (data) => {
+    const updated = await taskStatusService.syncStatuses(data);
+    const targetProj = data.projectId !== undefined ? data.projectId : get().filters.projectId;
+    const activeDept = get().filters.departmentId;
+    await get().fetchStatuses(
+      targetProj !== "ALL" ? targetProj : undefined,
+      activeDept !== "ALL" ? activeDept : undefined
+    );
+    await get().fetchTasks();
+    return updated;
   },
 
   reorderStatuses: async (items) => {
@@ -165,26 +337,19 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       if (res && res.success && res.data) {
         const { internal = [], gov_solutions = [] } = res.data;
 
-        const internalProjects: import("../types").TaskProject[] = [
-          {
-            id: "ERP_CORE",
-            key: "ERP",
-            name: "Hệ thống ERP Doanh nghiệp",
-            category: "INTERNAL",
-          },
-          ...internal.map((p) => ({
-            id: String(p.id),
-            key: (p as any).code || String(p.id),
-            code: (p as any).code,
-            name: p.name,
-            category: "INTERNAL" as const,
-          })),
-        ];
+        const internalProjects: import("../types").TaskProject[] = internal.map((p) => ({
+          id: String(p.id),
+          key: (p as any).code || String(p.id),
+          code: (p as any).code,
+          name: p.name,
+          category: "INTERNAL" as const,
+        }));
 
         const govProjects: import("../types").TaskProject[] = gov_solutions.map((gp) => {
+          const uniqueId = `gov_${gp.id}`;
           return {
-            id: `GOV_${gp.id}`,
-            key: gp.master_project?.code || String(gp.id),
+            id: uniqueId,
+            key: gp.master_project?.code || `GOV-${gp.id}`,
             code: gp.master_project?.code,
             name: `${gp.province?.name || "Không rõ"}`,
             category: "GOV_SOLUTION" as const,
@@ -192,7 +357,21 @@ export const useTaskStore = create<TaskState>((set, get) => ({
           };
         });
 
-        set({ projects: [...internalProjects, ...govProjects] });
+        const seenIds = new Set<string>();
+        const uniqueProjects: import("../types").TaskProject[] = [];
+
+        for (const p of [...internalProjects, ...govProjects]) {
+          if (!seenIds.has(p.id)) {
+            seenIds.add(p.id);
+            uniqueProjects.push(p);
+          }
+        }
+
+        const updates: Partial<TaskState> = { projects: uniqueProjects };
+        if (get().viewMode === "kanban" && (!get().filters.projectId || get().filters.projectId === "ALL") && uniqueProjects.length > 0) {
+          updates.filters = { ...get().filters, projectId: uniqueProjects[0].id };
+        }
+        set(updates);
         return;
       }
     } catch (err) {
@@ -206,31 +385,55 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     set({ isLoading: true, error: null });
 
-    // Đảm bảo fetch projects và statuses nếu chưa có
     if (currentState.projects.length === 0) {
-      currentState.fetchProjects();
+      await get().fetchProjects();
     }
-    if (currentState.statuses.length === 0) {
-      await currentState.fetchStatuses(currentState.filters.projectId, currentState.filters.departmentId);
+
+    let activeProjectId = get().filters.projectId;
+    if (get().viewMode === "kanban" && (!activeProjectId || activeProjectId === "ALL") && get().projects.length > 0) {
+      activeProjectId = get().projects[0].id;
+      set({ filters: { ...get().filters, projectId: activeProjectId } });
     }
+
+    await get().fetchStatuses(
+      activeProjectId && activeProjectId !== "ALL" ? activeProjectId : undefined,
+      get().filters.departmentId && get().filters.departmentId !== "ALL" ? get().filters.departmentId : undefined
+    );
 
     try {
       const state = get();
       const baseFilters = state.filters;
 
       if (state.viewMode === "kanban") {
-        // Tối ưu Kanban: gọi endpoint kanban tải ~10 task mỗi cột chuẩn xác
         const { tasks, cursors, hasMore } = await taskService.getKanbanTasks({
           ...baseFilters,
           perPage: 10,
         });
 
-        set({ tasks, cursors, hasMore, isLoading: false });
+        const currentActive = get().activeTask;
+        let refreshedActive = currentActive;
+        if (currentActive) {
+          const found = tasks.find((t) => t.id === currentActive.id);
+          if (found) {
+            refreshedActive = hydrateTaskSubtasks(found, tasks, get().statuses);
+          }
+        }
+
+        set({ tasks, cursors, hasMore, activeTask: refreshedActive, isLoading: false });
       } else {
-        // List View: Fetch 10 task mỗi trang theo chuẩn UX
         const { tasks, meta } = await taskService.getTasks({ ...baseFilters, perPage: 10 });
+        const currentActive = get().activeTask;
+        let refreshedActive = currentActive;
+        if (currentActive) {
+          const found = tasks.find((t) => t.id === currentActive.id);
+          if (found) {
+            refreshedActive = hydrateTaskSubtasks(found, tasks, get().statuses);
+          }
+        }
+
         set({
           tasks,
+          activeTask: refreshedActive,
           cursors: { ALL: meta?.next_cursor || null },
           hasMore: { ALL: meta?.has_more ?? false },
           isLoading: false
@@ -244,7 +447,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   fetchMoreTasks: async (statusColumn?: TaskStatus) => {
     const state = get();
-    // Dùng key là status truyền vào, nếu không truyền thì ngầm hiểu là view dạng List (ALL)
     const cursorKey = statusColumn || "ALL";
 
     if (state.isFetchingMore[cursorKey] || state.hasMore[cursorKey] === false || !state.cursors[cursorKey]) return;
@@ -254,7 +456,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const filtersToApply = { ...state.filters };
       if (statusColumn) {
         filtersToApply.status = statusColumn;
-        filtersToApply.perPage = 10; // Load thêm 10 task mỗi lần cuộn theo đúng yêu cầu
+        filtersToApply.perPage = 10;
       } else {
         filtersToApply.perPage = 10;
       }
@@ -264,7 +466,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         cursor: state.cursors[cursorKey],
       });
 
-      // Gộp task mới, đảm bảo không trùng ID
       const newTasks = tasks.filter(t => !state.tasks.find(existing => existing.id === t.id));
 
       set((prev) => ({
@@ -282,18 +483,32 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  setFilters: (newFilters) => {
-    set((state) => ({
-      filters: { ...state.filters, ...newFilters },
-    }));
-    get().fetchTasks();
+  setFilters: async (newFilters) => {
+    const prev = get().filters;
+    const updated = { ...prev, ...newFilters };
+
+    if (get().viewMode === "kanban" && (!updated.projectId || updated.projectId === "ALL") && get().projects.length > 0) {
+      updated.projectId = get().projects[0].id;
+    }
+
+    set({ filters: updated });
+    if (newFilters.projectId !== undefined || newFilters.departmentId !== undefined) {
+      await get().fetchStatuses(
+        updated.projectId && updated.projectId !== "ALL" ? updated.projectId : undefined,
+        updated.departmentId && updated.departmentId !== "ALL" ? updated.departmentId : undefined
+      );
+    }
+    await get().fetchTasks();
   },
 
-  resetFilters: () => {
+  resetFilters: async () => {
+    const isKanban = get().viewMode === "kanban";
+    const defaultProjectId = isKanban && get().projects.length > 0 ? get().projects[0].id : "ALL";
+
     set({
       filters: {
         search: "",
-        projectId: "ALL",
+        projectId: defaultProjectId,
         departmentId: "ALL",
         assigneeId: "ALL",
         priority: "ALL",
@@ -302,20 +517,44 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         dueDateRange: "all",
       },
     });
-    get().fetchTasks();
+    await get().fetchStatuses(defaultProjectId !== "ALL" ? defaultProjectId : undefined, undefined);
+    await get().fetchTasks();
   },
 
-  setViewMode: (mode) => set({ viewMode: mode }),
+  setViewMode: async (mode) => {
+    set({ viewMode: mode });
+    const currentFilters = get().filters;
+    if (mode === "kanban" && (!currentFilters.projectId || currentFilters.projectId === "ALL") && get().projects.length > 0) {
+      const defaultProjId = get().projects[0].id;
+      set({ filters: { ...currentFilters, projectId: defaultProjId } });
+      await get().fetchStatuses(defaultProjId, currentFilters.departmentId && currentFilters.departmentId !== "ALL" ? currentFilters.departmentId : undefined);
+      await get().fetchTasks();
+    } else {
+      await get().fetchTasks();
+    }
+  },
 
-  openDetail: (task) => set({ activeTask: task, isDetailOpen: true }),
+  openDetail: (task) => {
+    const currentTasks = get().tasks;
+    const freshTask = currentTasks.find((t) => t.id === task.id) || task;
+    const hydratedTask = hydrateTaskSubtasks(freshTask, currentTasks, get().statuses);
+    set({ activeTask: hydratedTask, isDetailOpen: true });
+  },
   closeDetail: () => set({ isDetailOpen: false }),
 
-  openCreate: () => set({ isCreateOpen: true }),
-  closeCreate: () => set({ isCreateOpen: false }),
+  openCreate: (initialStatus?: string | unknown, initialProjectId?: string) =>
+    set({
+      isCreateOpen: true,
+      createInitialStatus: typeof initialStatus === "string" ? initialStatus : undefined,
+      createInitialProjectId: typeof initialProjectId === "string" ? initialProjectId : undefined,
+    }),
+  closeCreate: () =>
+    set({
+      isCreateOpen: false,
+      createInitialStatus: undefined,
+      createInitialProjectId: undefined,
+    }),
 
-  /**
-   * Kéo thả Task (Optimistic update kèm Rollback nếu không hợp lệ)
-   */
   moveTask: async (taskId, targetStatus, currentUser) => {
     const currentTasks = get().tasks;
     const taskIndex = currentTasks.findIndex((t) => t.id === taskId);
@@ -328,53 +567,57 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return { success: true };
     }
 
-    // 1. Kiểm tra quy tắc chuyển trạng thái
-    const permission = checkTaskTransitionPermission(currentUser, task, targetStatus);
+    const allStatuses = get().statuses;
+    const targetStatusDef = allStatuses.find((s) => s.key === targetStatus);
+    const isTargetDone = targetStatusDef?.category === "DONE" || targetStatus === "DONE" || targetStatus === "CANCELLED";
+
+    const permission = checkTaskTransitionPermission(currentUser, task, targetStatus, allStatuses);
     if (!permission.allowed) {
       return { success: false, reason: permission.reason };
     }
 
-    // 2. Optimistic update: cập nhật state ngay lập tức để UI mượt mà
     const previousStatus = task.status;
     const previousResolution = task.resolution;
-    const targetResolution =
-      targetStatus === "DONE"
-        ? "DONE"
-        : targetStatus === "CANCELLED"
-          ? task.resolution || "WONT_FIX"
-          : undefined;
+    const previousClosedAt = task.closedAt;
 
-    const updatedTaskObj = {
+    const targetResolution = isTargetDone
+      ? (task.resolution || (targetStatus === "CANCELLED" ? "WONT_FIX" : "DONE"))
+      : undefined;
+
+    const nowIso = new Date().toISOString();
+    const updatedTaskObj: Task = {
       ...task,
       status: targetStatus,
       resolution: targetResolution,
+      closedAt: isTargetDone ? (task.closedAt || nowIso) : undefined,
+      updatedAt: nowIso,
     };
 
-    const updatedTasks = [...currentTasks];
-    updatedTasks[taskIndex] = updatedTaskObj;
-    set({ tasks: updatedTasks });
+    set((state) => ({
+      tasks: syncTaskInCollection(state.tasks, updatedTaskObj, state.statuses),
+      activeTask: syncActiveTask(state.activeTask, updatedTaskObj, state.statuses),
+    }));
 
-    // Cập nhật cả activeTask nếu đang mở dialog
-    if (get().activeTask?.id === taskId) {
-      set({ activeTask: updatedTaskObj });
-    }
-
-    // 3. Gọi service
     try {
-      await taskService.updateTaskStatus(taskId, targetStatus, targetResolution);
+      const serverUpdated = await taskService.updateTaskStatus(taskId, targetStatus, targetResolution);
+      if (serverUpdated) {
+        set((state) => ({
+          tasks: syncTaskInCollection(state.tasks, serverUpdated, state.statuses),
+          activeTask: syncActiveTask(state.activeTask, serverUpdated, state.statuses),
+        }));
+      }
       return { success: true };
     } catch {
-      // Rollback nếu API lỗi
-      const rolledBack = [...get().tasks];
-      const rIdx = rolledBack.findIndex((t) => t.id === taskId);
-      if (rIdx !== -1) {
-        rolledBack[rIdx] = {
-          ...rolledBack[rIdx],
-          status: previousStatus,
-          resolution: previousResolution,
-        };
-        set({ tasks: rolledBack });
-      }
+      const rolledBackObj: Task = {
+        ...task,
+        status: previousStatus,
+        resolution: previousResolution,
+        closedAt: previousClosedAt,
+      };
+      set((state) => ({
+        tasks: syncTaskInCollection(state.tasks, rolledBackObj, state.statuses),
+        activeTask: syncActiveTask(state.activeTask, rolledBackObj, state.statuses),
+      }));
       return {
         success: false,
         reason: "Lỗi kết nối khi cập nhật trạng thái. Đã khôi phục trạng thái ban đầu.",
@@ -382,9 +625,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  /**
-   * Đóng task với Resolution cụ thể (Won't Fix, Not a Bug, Duplicate, Cannot Reproduce)
-   */
   closeTask: async (taskId, resolution, note, currentUser) => {
     const currentTasks = get().tasks;
     const task = currentTasks.find((t) => t.id === taskId);
@@ -392,20 +632,24 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return { success: false, reason: "Không tìm thấy công việc cần đóng" };
     }
 
+    const allStatuses = get().statuses;
+    const cancelStatus = allStatuses.find((s) => s.category === "DONE" && (s.key === "CANCELLED" || s.name.toLowerCase().includes("hủy") || s.name.toLowerCase().includes("đóng")))?.key
+      || allStatuses.find((s) => s.category === "DONE")?.key
+      || "CANCELLED";
+
     if (currentUser) {
-      const permission = checkTaskTransitionPermission(currentUser, task, "CANCELLED");
+      const permission = checkTaskTransitionPermission(currentUser, task, cancelStatus, allStatuses);
       if (!permission.allowed) {
         return { success: false, reason: permission.reason };
       }
     }
 
     try {
-      const updated = await taskService.closeTask(taskId, resolution, note, currentUser?.id);
-      const updatedTasks = get().tasks.map((t) => (t.id === taskId ? updated : t));
-      set({ tasks: updatedTasks });
-      if (get().activeTask?.id === taskId) {
-        set({ activeTask: updated });
-      }
+      const updated = await taskService.closeTask(taskId, resolution, note, currentUser?.id, cancelStatus);
+      set((state) => ({
+        tasks: syncTaskInCollection(state.tasks, updated, state.statuses),
+        activeTask: syncActiveTask(state.activeTask, updated, state.statuses),
+      }));
       return { success: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Lỗi khi đóng công việc";
@@ -413,9 +657,6 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  /**
-   * Mở lại công việc đã đóng hoặc đã nghiệm thu (Reopen về To Do)
-   */
   reopenTask: async (taskId, currentUser) => {
     const currentTasks = get().tasks;
     const task = currentTasks.find((t) => t.id === taskId);
@@ -423,18 +664,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return { success: false, reason: "Không tìm thấy công việc cần mở lại" };
     }
 
-    const permission = checkTaskTransitionPermission(currentUser, task, "TODO");
+    const allStatuses = get().statuses;
+    const todoStatus = allStatuses.find((s) => s.category === "TODO")?.key || allStatuses[0]?.key || "TODO";
+
+    const permission = checkTaskTransitionPermission(currentUser, task, todoStatus, allStatuses);
     if (!permission.allowed) {
       return { success: false, reason: permission.reason };
     }
 
     try {
-      const updated = await taskService.reopenTask(taskId);
-      const updatedTasks = get().tasks.map((t) => (t.id === taskId ? updated : t));
-      set({ tasks: updatedTasks });
-      if (get().activeTask?.id === taskId) {
-        set({ activeTask: updated });
-      }
+      const updated = await taskService.reopenTask(taskId, todoStatus);
+      set((state) => ({
+        tasks: syncTaskInCollection(state.tasks, updated, state.statuses),
+        activeTask: syncActiveTask(state.activeTask, updated, state.statuses),
+      }));
       return { success: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Lỗi khi mở lại công việc";
@@ -453,8 +696,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   updateTask: async (id, updates) => {
     const updated = await taskService.updateTask(id, updates);
     set((state) => ({
-      tasks: state.tasks.map((t) => (t.id === id ? updated : t)),
-      activeTask: state.activeTask?.id === id ? updated : state.activeTask,
+      tasks: syncTaskInCollection(state.tasks, updated, state.statuses),
+      activeTask: syncActiveTask(state.activeTask, updated, state.statuses),
     }));
     return updated;
   },
@@ -463,57 +706,157 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const success = await taskService.deleteTask(id);
     if (success) {
       set((state) => ({
-        tasks: state.tasks.filter((t) => t.id !== id),
-        activeTask: state.activeTask?.id === id ? null : state.activeTask,
+        tasks: removeTaskFromCollection(state.tasks, id, state.statuses),
+        activeTask: removeTaskFromActive(state.activeTask, id, state.statuses),
         isDetailOpen: state.activeTask?.id === id ? false : state.isDetailOpen,
       }));
     }
     return success;
   },
 
-  approveTask: async (taskId, approvedBy) => {
-    const task = get().tasks.find((t) => t.id === taskId);
-    if (!task) return { success: false, reason: "Không tìm thấy task" };
 
-    if (approvedBy.role === "EMPLOYEE") {
-      return { success: false, reason: "Nhân viên không có quyền phê duyệt task." };
-    }
 
-    await taskService.updateTask(taskId, {
-      status: "TODO",
-      isApproved: true,
-      requiresApproval: false,
-      approvedById: approvedBy.id,
+  createSubtask: async (parentId, data) => {
+    const parentTask =
+      get().activeTask?.id === parentId
+        ? get().activeTask
+        : get().tasks.find((t) => t.id === parentId);
+
+    const created = await taskService.createSubtask(
+      parentId,
+      data,
+      parentTask || undefined
+    );
+
+    const newSubtask: Task = {
+      ...created,
+      parentId: parentId,
+      parent: created.parent || (parentTask ? {
+        id: parentTask.id,
+        code: parentTask.code,
+        title: parentTask.title,
+      } as any : null),
+    };
+
+    set((state) => {
+      const tasksWithSub = state.tasks.some((t) => t.id === newSubtask.id)
+        ? state.tasks
+        : [...state.tasks, newSubtask];
+
+      return {
+        tasks: syncTaskInCollection(tasksWithSub, newSubtask, state.statuses),
+        activeTask: syncActiveTask(state.activeTask, newSubtask, state.statuses),
+      };
     });
 
-    await get().fetchTasks();
-    return { success: true };
+    return newSubtask;
   },
 
-  rejectTask: async (taskId, rejectedBy) => {
-    const task = get().tasks.find((t) => t.id === taskId);
-    if (!task) return { success: false, reason: "Không tìm thấy task" };
+  uploadAttachment: async (taskId, file) => {
+    const newAttachment = await taskService.uploadAttachment(taskId, file);
+    set((state) => {
+      const updatedActiveTask =
+        state.activeTask?.id === taskId
+          ? {
+              ...state.activeTask,
+              attachments: [...(state.activeTask.attachments || []), newAttachment],
+            }
+          : state.activeTask;
 
-    if (rejectedBy.role === "EMPLOYEE") {
-      return { success: false, reason: "Nhân viên không có quyền từ chối task." };
-    }
+      const updatedTasks = state.tasks.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              attachments: [...(t.attachments || []), newAttachment],
+            }
+          : t
+      );
 
-    await taskService.updateTask(taskId, {
-      status: "CANCELLED",
-      isApproved: false,
+      return {
+        activeTask: updatedActiveTask,
+        tasks: updatedTasks,
+      };
     });
+    return newAttachment;
+  },
 
-    await get().fetchTasks();
-    return { success: true };
+  uploadAttachments: async (taskId, files) => {
+    const newAttachments = await taskService.uploadAttachments(taskId, files);
+    set((state) => {
+      const updatedActiveTask =
+        state.activeTask?.id === taskId
+          ? {
+              ...state.activeTask,
+              attachments: [...(state.activeTask.attachments || []), ...newAttachments],
+            }
+          : state.activeTask;
+
+      const updatedTasks = state.tasks.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              attachments: [...(t.attachments || []), ...newAttachments],
+            }
+          : t
+      );
+
+      return {
+        activeTask: updatedActiveTask,
+        tasks: updatedTasks,
+      };
+    });
+    return newAttachments;
+  },
+
+  deleteAttachment: async (taskId, attachmentId) => {
+    await taskService.deleteAttachment(taskId, attachmentId);
+    set((state) => {
+      const updatedActiveTask =
+        state.activeTask?.id === taskId
+          ? {
+              ...state.activeTask,
+              attachments: (state.activeTask.attachments || []).filter((a) => a.id !== attachmentId),
+            }
+          : state.activeTask;
+
+      const updatedTasks = state.tasks.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              attachments: (t.attachments || []).filter((a) => a.id !== attachmentId),
+            }
+          : t
+      );
+
+      return {
+        activeTask: updatedActiveTask,
+        tasks: updatedTasks,
+      };
+    });
   },
 
   toggleChecklistItem: async (taskId, itemId) => {
-    const task = get().tasks.find((t) => t.id === taskId);
-    if (!task) return;
+    const current =
+      get().activeTask?.id === taskId
+        ? get().activeTask
+        : get().tasks.find((t) => t.id === taskId);
+    if (!current || !current.checklist) return;
 
-    const newChecklist = task.checklist.map((item) =>
-      item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
+    const newChecklist = current.checklist.map((item) =>
+      String(item.id) === String(itemId)
+        ? { ...item, isCompleted: !item.isCompleted }
+        : item
     );
+
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === taskId ? { ...t, checklist: newChecklist } : t
+      ),
+      activeTask:
+        state.activeTask?.id === taskId
+          ? { ...state.activeTask, checklist: newChecklist }
+          : state.activeTask,
+    }));
 
     await get().updateTask(taskId, { checklist: newChecklist });
   },

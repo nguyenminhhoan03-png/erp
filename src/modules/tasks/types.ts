@@ -1,12 +1,12 @@
 import { DepartmentId, User } from "@/shared/types";
 
 export type TaskStatus =
-  | "PENDING_APPROVAL" // Chờ duyệt (cho task nhân viên tự tạo)
-  | "TODO"             // Cần làm
-  | "IN_PROGRESS"      // Đang làm
-  | "IN_REVIEW"        // Chờ review / Chờ nghiệm thu
-  | "DONE"             // Hoàn thành
-  | "CANCELLED"        // Đã hủy / Đã đóng (Closed/Cancelled)
+  | "PENDING_APPROVAL" 
+  | "TODO"             
+  | "IN_PROGRESS"      
+  | "IN_REVIEW"        
+  | "DONE"             
+  | "CANCELLED"        
   | (string & {});
 
 export type StatusCategory = "TODO" | "IN_PROGRESS" | "DONE";
@@ -25,11 +25,11 @@ export interface CustomTaskStatus {
 }
 
 export type TaskResolution =
-  | "DONE"             // Hoàn thành / Resolved
-  | "NOT_A_BUG"        // Không phải lỗi / Invalid (By design, user thao tác nhầm)
-  | "WONT_FIX"         // Không sửa / Won't Do (Chi phí cao, out of scope, tính năng sắp bỏ)
-  | "CANNOT_REPRODUCE" // Không tái hiện được lỗi
-  | "DUPLICATE";       // Trùng lặp với task khác
+  | "DONE"             
+  | "NOT_A_BUG"        
+  | "WONT_FIX"         
+  | "CANNOT_REPRODUCE" 
+  | "DUPLICATE";       
 
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
@@ -58,11 +58,25 @@ export interface TaskActivityLog {
   createdAt: string;
 }
 
+export interface TaskAttachment {
+  id: string;
+  taskId?: string;
+  title?: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize?: number;
+  fileType?: string;
+  uploadedById?: string;
+  uploadedBy?: string;
+  uploader?: User;
+  createdAt: string;
+}
+
 export interface TaskProject {
-  id: string; // e.g. "ERP_CORE", "DLTM_LCA", "DLTM_LDO", "DLTM_KGI"
-  key: string; // e.g. "ERP", "LCA", "LDO", "KGI"
-  code?: string; // e.g. DLTM
-  name: string; // e.g. "Hệ thống ERP Doanh nghiệp", "CĐS Du lịch - Tỉnh Lào Cai"
+  id: string; 
+  key: string; 
+  code?: string; 
+  name: string; 
   category: "INTERNAL" | "GOV_SOLUTION";
   badgeBg?: string;
   badgeText?: string;
@@ -72,20 +86,26 @@ export interface TaskProject {
 
 export interface Task {
   id: string;
-  code: string; // e.g. ERP-101, LCA-01
+  code: string; 
   title: string;
   description: string;
-  projectId?: string; // e.g. "ERP_CORE", "DLTM_LCA"
+  projectId?: string; 
   projectName?: string;
-  projectKey?: string; // e.g. "ERP", "LCA"
+  projectKey?: string; 
   status: TaskStatus;
   priority: TaskPriority;
   departmentId: DepartmentId;
+  departmentName?: string;
   creatorId: string;
   creator?: User;
-  assigneeIds: string[]; // Can assign to one or multiple users
+  reportToId?: string;
+  reportToIds?: string[];
+  reportTo?: User;
+  reporters?: User[];
+  reportTos?: User[];
+  assigneeIds: string[]; 
   assignees?: User[];
-  dueDate: string; // ISO string
+  dueDate: string; 
   startDate?: string;
   estimatedHours?: number;
   checklist: TaskChecklistItem[];
@@ -94,35 +114,87 @@ export interface Task {
   requiresApproval?: boolean;
   isApproved?: boolean;
   approvedById?: string;
-  resolution?: TaskResolution; // Chuẩn Jira: Kết quả xử lý khi hoàn thành hoặc đóng/hủy task
-  resolutionNote?: string;     // Ghi chú lý do đóng (vd: Trùng với ERP-102, Không tái hiện được)
-  closedAt?: string;           // Thời điểm đóng task
-  closedById?: string;         // Người thực hiện đóng task
+  resolution?: TaskResolution; 
+  resolutionNote?: string;     
+  closedAt?: string;           
+  closedById?: string;         
+  parentId?: string | null;
+  parent?: Task | null;
+  subTasks?: Task[];
+  subtasksCount?: number;
+  completedSubtasksCount?: number;
+  attachments?: TaskAttachment[];
   createdAt: string;
   updatedAt: string;
 }
 
+export interface CreateSubtaskInput {
+  title: string;
+  assigneeIds?: string[];
+  dueDate?: string;
+  startDate?: string;
+  priority?: TaskPriority;
+  status?: TaskStatus;
+  estimatedHours?: number;
+  description?: string;
+}
+
 export interface DailyReportItem {
   id: string;
-  taskId?: string; // Link to existing task (optional)
-  taskTitle: string; // Task name or free text
+  taskId?: string; 
+  taskTitle: string; 
   hoursSpent: number;
   status: TaskStatus | "COMPLETED" | "IN_PROGRESS";
   note?: string;
 }
 
-export type DailyReportStatus = "DRAFT" | "SUBMITTED";
+export type DailyReportType = "daily" | "monthly" | "yearly";
+
+export type DailyReportStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "rejected";
+
+export interface ReportRecipient {
+  id?: string;
+  dailyReportId?: string;
+  userId: string;
+  recipientType: "reviewer" | "cc";
+  user?: User;
+}
+
+export interface ReportFeedback {
+  id: string;
+  dailyReportId?: string;
+  feedbackBy: string;
+  feedbackContent: string;
+  user?: User;
+  createdAt: string;
+}
 
 export interface DailyReport {
   id: string;
   userId: string;
   user?: User;
+  type?: DailyReportType;
   departmentId: DepartmentId;
-  date: string; // YYYY-MM-DD
+  date: string;
   status: DailyReportStatus;
   todayWorks: DailyReportItem[];
   tomorrowPlans: string;
   blockers?: string;
+  approverId?: string;
+  approver?: User;
+  ccRecipientIds?: string[];
+  ccRecipients?: User[];
+  attachments?: string[];
+  feedbacks?: ReportFeedback[];
+  managerFeedback?: string;
   submittedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -137,6 +209,7 @@ export interface TaskFilterParams {
   status?: TaskStatus | "ALL";
   isMyTasksOnly?: boolean;
   dueDateRange?: "today" | "this_week" | "overdue" | "all";
+  parentId?: string;
   perPage?: number;
   cursor?: string;
 }

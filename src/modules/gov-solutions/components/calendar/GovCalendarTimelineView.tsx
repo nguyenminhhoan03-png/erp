@@ -55,20 +55,16 @@ export function GovCalendarTimelineView({
   onDeleteMeeting,
   onSelectProject,
 }: GovCalendarTimelineViewProps) {
-  // Thứ tự sắp xếp ngày: ASC (Cận ngày nhất trước) hoặc DESC (Xa nhất trước)
   const [sortOrder, setSortOrder] = React.useState<"ASC" | "DESC">("ASC");
 
-  // Trạng thái thu phóng các ngày
   const [collapsedDates, setCollapsedDates] = React.useState<Record<string, boolean>>({});
 
-  // Phân trang Cursor theo mốc ngày (mặc định 7 mốc ngày/lượt)
   const [visibleDaysCount, setVisibleDaysCount] = React.useState<number>(7);
 
   const toggleDate = React.useCallback((dateKey: string) => {
     setCollapsedDates((prev) => ({ ...prev, [dateKey]: !prev[dateKey] }));
   }, []);
 
-  // Nhóm lịch họp theo Ngày
   const groupedMeetings = React.useMemo(() => {
     const groups: Record<string, GovMeetingSchedule[]> = {};
 
@@ -84,7 +80,6 @@ export function GovCalendarTimelineView({
       groups[dateKey].push(m);
     });
 
-    // Sắp xếp các ngày theo sortOrder
     const sortedKeys = Object.keys(groups).sort((a, b) => {
       if (a === "Chưa rõ thời gian") return 1;
       if (b === "Chưa rõ thời gian") return -1;
@@ -122,7 +117,6 @@ export function GovCalendarTimelineView({
     setCollapsedDates({});
   }, []);
 
-  // Danh sách các mốc ngày hiển thị theo phân trang
   const displayedGroups = React.useMemo(() => {
     return groupedMeetings.slice(0, visibleDaysCount);
   }, [groupedMeetings, visibleDaysCount]);
@@ -145,7 +139,6 @@ export function GovCalendarTimelineView({
     }, 200);
   }, [visibleDaysCount, groupedMeetings.length]);
 
-  // Tự động load thêm các ngày tiếp theo khi cuộn xuống gần đáy (Hỗ trợ cả window scroll và main container overflow-y-auto)
   React.useEffect(() => {
     if (visibleDaysCount >= groupedMeetings.length) return;
 
@@ -157,27 +150,22 @@ export function GovCalendarTimelineView({
       const rect = sentinel.getBoundingClientRect();
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
 
-      // Kích hoạt sớm khi sentinel nằm trong khoảng 400px so với mép dưới màn hình
       if (rect.top <= viewportHeight + 400) {
         loadMoreDays();
       }
     };
 
-    // Kiểm tra ngay lập tức khi mount / khi visibleDaysCount cập nhật
     const timer = setTimeout(checkShouldLoad, 50);
 
-    // Lắng nghe sự kiện scroll trên cả window và document
     window.addEventListener("scroll", checkShouldLoad, { passive: true });
     window.addEventListener("resize", checkShouldLoad, { passive: true });
     document.addEventListener("scroll", checkShouldLoad, { passive: true });
 
-    // Lắng nghe scroll trên container cha có overflow (đặc biệt là <main className="overflow-y-auto"> của layout)
     const mainEl = document.querySelector("main") || sentinelRef.current?.closest(".overflow-y-auto");
     if (mainEl) {
       mainEl.addEventListener("scroll", checkShouldLoad, { passive: true });
     }
 
-    // Kết hợp IntersectionObserver làm kênh kích hoạt song song
     let observer: IntersectionObserver | null = null;
     if (sentinelRef.current) {
       try {
@@ -195,7 +183,6 @@ export function GovCalendarTimelineView({
         );
         observer.observe(sentinelRef.current);
       } catch {
-        // Fallback an toàn nếu trình duyệt hạn chế
       }
     }
 
@@ -320,7 +307,7 @@ export function GovCalendarTimelineView({
         </div>
         <h4 className="font-semibold text-foreground text-sm">Không tìm thấy lịch công tác nào</h4>
         <p className="text-xs text-muted-foreground max-w-sm">
-          Thử điều chỉnh lại bộ lọc tìm kiếm hoặc bấm nút &ldquo;+ Đặt lịch công tác&rdquo; để tạo cuộc hẹn mới.
+          Thử điều chỉnh lại bộ lọc tìm kiếm hoặc bấm nút &ldquo;+ Đặt lịch họp&rdquo; để tạo cuộc hẹn mới.
         </p>
       </div>
     );
@@ -328,7 +315,6 @@ export function GovCalendarTimelineView({
 
   return (
     <div className="space-y-6">
-      {/* Thanh điều khiển thứ tự hiển thị & Thu phóng tất cả */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 px-1 py-1 text-xs">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
@@ -340,7 +326,6 @@ export function GovCalendarTimelineView({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Nút Thu phóng tất cả các ngày */}
           <button
             type="button"
             onClick={allCollapsed ? expandAll : collapseAll}
@@ -355,7 +340,6 @@ export function GovCalendarTimelineView({
             <span>{allCollapsed ? "Mở rộng tất cả" : "Thu gọn tất cả"}</span>
           </button>
 
-          {/* Nút Đổi chiều sắp xếp thời gian */}
           <button
             type="button"
             onClick={() => setSortOrder((prev) => (prev === "ASC" ? "DESC" : "ASC"))}
@@ -368,7 +352,6 @@ export function GovCalendarTimelineView({
         </div>
       </div>
 
-      {/* Danh sách các mốc thời gian */}
       <div className="space-y-8">
         {displayedGroups.map(({ dateKey, items }) => {
           const dateInfo = parseDateInfo(dateKey);
@@ -376,7 +359,6 @@ export function GovCalendarTimelineView({
 
           return (
             <div key={dateKey} className="relative flex flex-col md:flex-row gap-4 md:gap-6 group">
-              {/* CỘT MỐC NGÀY (Executive Date Pillar) */}
               <div className="md:w-44 lg:w-48 shrink-0">
                 <div
                   onClick={() => toggleDate(dateKey)}
@@ -388,7 +370,6 @@ export function GovCalendarTimelineView({
                     isCollapsed && "bg-muted/25 border-dashed border-border/90"
                   )}
                 >
-                  {/* Tag nhận diện hôm nay / ngày mai / thứ + Nút Button Down thu phóng */}
                   <div className="flex items-center justify-between gap-1 mb-2">
                     <span
                       className={cn(
@@ -409,7 +390,6 @@ export function GovCalendarTimelineView({
                         : dateInfo.dayName}
                     </span>
 
-                    {/* NÚT BUTTON DOWN THU PHÓNG */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -433,7 +413,6 @@ export function GovCalendarTimelineView({
                     </button>
                   </div>
 
-                  {/* Số ngày to & Tháng */}
                   <div className="flex items-baseline justify-between">
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-black font-mono tracking-tight text-foreground">
@@ -458,9 +437,7 @@ export function GovCalendarTimelineView({
                 </div>
               </div>
 
-              {/* TRỤC DÒNG THỜI GIAN (Vertical Timeline Rail) */}
               <div className="hidden md:flex flex-col items-center shrink-0 relative pt-5">
-                {/* Chấm mốc tròn */}
                 <div
                   className={cn(
                     "h-3.5 w-3.5 rounded-full border-2 border-background z-10 transition-transform group-hover:scale-125",
@@ -471,14 +448,11 @@ export function GovCalendarTimelineView({
                       : "bg-muted-foreground/60 ring-4 ring-muted/50"
                   )}
                 />
-                {/* Đường nối dọc */}
                 <div className="w-0.5 flex-1 bg-gradient-to-b from-border/90 via-border/60 to-border/30 my-2" />
               </div>
 
-              {/* DANH SÁCH CUỘC HẸN TRONG NGÀY */}
               <div className="flex-1 space-y-3.5 min-w-0">
                 {isCollapsed ? (
-                  /* GIAO DIỆN KHI THU GỌN NGÀY */
                   <div
                     onClick={() => toggleDate(dateKey)}
                     className="rounded-2xl border border-dashed border-border/80 bg-muted/20 hover:bg-muted/40 p-4 transition-all cursor-pointer flex items-center justify-between gap-4 text-xs group select-none shadow-2xs"
@@ -514,6 +488,7 @@ export function GovCalendarTimelineView({
                     const isUpcoming = m.status === "UPCOMING";
                     const isDone = m.status === "DONE";
                     const isCancelled = m.status === "CANCELLED";
+                    const isInProgress = m.status === "IN_PROGRESS";
                     const hasConflict = Boolean((m as any).hasConflict);
                     const isOnline =
                       m.location?.toLowerCase().includes("online") ||
@@ -541,7 +516,6 @@ export function GovCalendarTimelineView({
                           !hasConflict && isCancelled && "bg-muted/30 border-border/40 opacity-60"
                         )}
                       >
-                        {/* Cảnh báo trùng lịch của Lãnh đạo nếu có - HIỂN THỊ RÕ TÊN LÃNH ĐẠO */}
                         {hasConflict && (
                           <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-800 dark:text-rose-200 space-y-1.5 text-xs">
                             <div className="flex items-center gap-2 font-bold text-rose-700 dark:text-rose-300">
@@ -595,22 +569,18 @@ export function GovCalendarTimelineView({
                           </div>
                         )}
 
-                        {/* Hàng 1: Thời gian, Tỉnh thành, Giai đoạn, Trạng thái */}
                         <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-border/50 pb-2.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            {/* Giờ họp */}
                             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-mono font-bold text-xs">
                               <Clock className="h-3.5 w-3.5" />
                               <span>{timeDisplay}</span>
                             </div>
 
-                            {/* Tên tỉnh thành */}
                             <div className="flex items-center gap-1.5 font-bold text-sm text-foreground">
                               <Building2 className="h-4 w-4 text-primary shrink-0" />
                               <span>{m.provinceName}</span>
                             </div>
 
-                            {/* Badge Giai đoạn 7 bước */}
                             {stageInfo && (
                               <Badge
                                 variant="outline"
@@ -620,7 +590,6 @@ export function GovCalendarTimelineView({
                               </Badge>
                             )}
 
-                            {/* Badge Hình thức */}
                             <span
                               className={cn(
                                 "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border",
@@ -634,21 +603,20 @@ export function GovCalendarTimelineView({
                             </span>
                           </div>
 
-                          {/* Trạng thái cuộc họp */}
                           <Badge
                             variant="outline"
                             className={cn(
                               "text-xs font-semibold px-2.5 py-0.5 shrink-0",
+                              isInProgress && "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse",
                               isUpcoming && "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
                               isDone && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
                               isCancelled && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
                             )}
                           >
-                            {isUpcoming ? "⏳ Sắp diễn ra" : isDone ? "✅ Đã họp xong" : "🚫 Đã hủy"}
+                            {isInProgress ? "⚡ Đang diễn ra" : isUpcoming ? "⏳ Sắp diễn ra" : isDone ? "✅ Đã họp xong" : "🚫 Đã hủy"}
                           </Badge>
                         </div>
 
-                        {/* Hàng 2: Nội dung & Mục tiêu làm việc */}
                         <div className="space-y-1.5 pt-0.5">
                           <div className="flex items-start gap-2">
                             <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 mt-0.5">
@@ -659,14 +627,12 @@ export function GovCalendarTimelineView({
                             </h4>
                           </div>
 
-                          {/* Nếu có cả title và content khác nhau thì hiển thị thêm chi tiết */}
                           {m.title && m.content && m.title !== m.content && (
                             <p className="text-xs text-muted-foreground pl-16 leading-relaxed">
                               {m.content}
                             </p>
                           )}
 
-                          {/* Địa điểm chi tiết */}
                           <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
                             <MapPin className="h-3.5 w-3.5 text-rose-500/80 shrink-0" />
                             <span>
@@ -678,18 +644,14 @@ export function GovCalendarTimelineView({
                           </div>
                         </div>
 
-                        {/* Hàng 3: Nhân sự chủ trì & Thao tác điều phối */}
                         <div className="pt-2 border-t border-border/50 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-                          {/* Chips Nhân sự */}
                           <div className="flex flex-wrap items-center gap-2">
-                            {/* Sếp chủ trì */}
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/60 text-[11px]">
                               <UserCheck className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                               <span className="text-muted-foreground">Chủ trì:</span>
                               <strong className="text-foreground">{m.hostName || "Lãnh đạo IGB"}</strong>
                             </div>
 
-                            {/* Đầu mối địa phương */}
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/60 text-[11px]">
                               <Building className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                               <span className="text-muted-foreground">Đầu mối:</span>
@@ -697,20 +659,21 @@ export function GovCalendarTimelineView({
                             </div>
                           </div>
 
-                          {/* Thao tác */}
                           <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                            {isUpcoming && (
+                            {!isDone && !isCancelled && (
                               <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => onUpdateStatus(m.id, "DONE")}
-                                  className="h-7.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 cursor-pointer rounded-lg"
-                                  title="Xác nhận đã họp xong"
-                                >
-                                  <Check className="h-3.5 w-3.5 mr-1" />
-                                  <span>Đã họp xong</span>
-                                </Button>
+                                {m.scheduledAt && new Date() >= new Date(m.scheduledAt.replace(" ", "T")) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => onUpdateStatus(m.id, "DONE")}
+                                    className="h-7.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 cursor-pointer rounded-lg"
+                                    title="Xác nhận đã họp xong"
+                                  >
+                                    <Check className="h-3.5 w-3.5 mr-1" />
+                                    <span>Đã họp xong</span>
+                                  </Button>
+                                )}
 
                                 <Button
                                   size="sm"
@@ -724,11 +687,11 @@ export function GovCalendarTimelineView({
                               </>
                             )}
 
-                            {onSelectProject && (
+                            {onSelectProject && m.projectId && (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => onSelectProject(m.projectId)}
+                                onClick={() => onSelectProject(m.projectId!)}
                                 className="h-7.5 text-xs font-medium text-primary border-primary/30 bg-primary/5 hover:bg-primary/10 px-2.5 cursor-pointer rounded-lg"
                                 title="Xem chi tiết hồ sơ tỉnh này"
                               >
@@ -758,14 +721,11 @@ export function GovCalendarTimelineView({
         })}
       </div>
 
-      {/* Điểm neo Sentinel để phát hiện khi người dùng cuộn đến gần cuối */}
       <div ref={sentinelRef} className="h-12 w-full pointer-events-none -mt-4 opacity-0" />
 
-      {/* Thanh trạng thái Infinite Scroll & Điều khiển (cập nhật từ thanh cũ) */}
       {groupedMeetings.length > 0 && (
         <div className="pt-2">
           <div className="relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-3 p-4 rounded-2xl border border-border/80 bg-card/75 backdrop-blur-md shadow-xs text-xs transition-all">
-            {/* Thanh tiến trình Progress Bar chạy mỏng ở đỉnh */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-muted/40">
               <div
                 className="h-full bg-linear-to-r from-primary via-indigo-500 to-sky-500 transition-all duration-300 rounded-r-full"
@@ -773,7 +733,6 @@ export function GovCalendarTimelineView({
               />
             </div>
 
-            {/* Thông tin trạng thái phân trang cuộn */}
             <div className="flex items-center gap-3 w-full md:w-auto">
               <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
                 <Calendar className="h-4 w-4" />
@@ -814,7 +773,6 @@ export function GovCalendarTimelineView({
               </div>
             </div>
 
-            {/* Các nút điều khiển tiện ích */}
             <div className="flex items-center gap-2 flex-wrap w-full md:w-auto justify-end">
               {visibleDaysCount < groupedMeetings.length && (
                 <>

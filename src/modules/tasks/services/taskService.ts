@@ -1,217 +1,109 @@
-import { apiRequest } from "@/lib/api-client";
-import { INITIAL_MOCK_TASKS } from "../mock-data";
-import { Task, TaskFetchResult, TaskFilterParams, TaskPaginationMeta, TaskResolution, TaskStatus } from "../types";
+import { apiClient } from "@/lib/api";
+import {
+  Task,
+  TaskAttachment,
+  TaskComment,
+  TaskFetchResult,
+  TaskFilterParams,
+  TaskResolution,
+  TaskStatus,
+  CreateSubtaskInput,
+} from "../types";
+import { resolveProjectScope } from "../utils/projectScope";
+import type { TaskDto, TaskCollectionDto, TaskCommentDto } from "../api/dto";
+import { isTaskCollectionDto, isTaskDto, isTaskCommentDto } from "../api/schema";
+import {
+  mapTask,
+  mapTaskCollectionResponse,
+  mapComment,
+  mapAttachment,
+} from "../api/mapper";
 
-const DELAY_MIN = 150;
-const DELAY_MAX = 300;
+function buildTaskQueryParams(params?: TaskFilterParams, defaultPerPage = 10): Record<string, string> {
+  const query: Record<string, string> = {};
+  if (!params) return query;
 
-function fakeDelay(): Promise<void> {
-  const ms = Math.floor(Math.random() * (DELAY_MAX - DELAY_MIN + 1)) + DELAY_MIN;
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-const STORAGE_KEY = "erp_tasks_clean_v1";
-
-// Cache in-memory / localStorage để giữ trạng thái
-function getStoredTasks(): Task[] {
-  if (typeof window !== "undefined") {
-    // Xóa triệt để các cache mock cũ nếu còn sót lại trong trình duyệt
-    try {
-      localStorage.removeItem("erp_tasks_cache_v3");
-      localStorage.removeItem("erp_tasks_cache_v2");
-      localStorage.removeItem("erp_tasks_cache_v1");
-    } catch {
-      // Ignore
-    }
-
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        const parsed = JSON.parse(data);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
-    } catch {
-      // Fallback
-    }
-  }
-  return [];
-}
-
-function saveStoredTasks(tasks: Task[]): void {
-  if (typeof window !== "undefined") {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    } catch {
-      // Ignore
-    }
-  }
-}
-
-let inMemoryTasks: Task[] = getStoredTasks();
-
-function applyLocalFilters(tasks: Task[], params?: TaskFilterParams): Task[] {
-  if (!params) return tasks;
-  let result = [...tasks];
-
-  if (params.search && params.search.trim()) {
-    const q = params.search.toLowerCase().trim();
-    result = result.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.code.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q) ||
-        (t.projectName && t.projectName.toLowerCase().includes(q))
-    );
+  if (params.search?.trim()) {
+    query.search = params.search.trim();
   }
 
   if (params.projectId && params.projectId !== "ALL") {
-    result = result.filter((t) => t.projectId === params.projectId);
+    query.projectId = params.projectId;
+    const scope = resolveProjectScope(params.projectId);
+    if (scope.gov_project_id) {
+      query.gov_project_id = String(scope.gov_project_id);
+    } else if (scope.project_id) {
+      query.project_id = String(scope.project_id);
+    }
   }
 
   if (params.departmentId && params.departmentId !== "ALL") {
-    result = result.filter((t) => t.departmentId === params.departmentId);
+    query.departmentId = params.departmentId;
   }
 
   if (params.assigneeId && params.assigneeId !== "ALL") {
-    result = result.filter((t) => t.assigneeIds.includes(params.assigneeId!));
+    query.assigneeId = params.assigneeId;
   }
 
   if (params.priority && params.priority !== "ALL") {
-    result = result.filter((t) => t.priority === params.priority);
+    query.priority = params.priority;
   }
 
   if (params.status && params.status !== "ALL") {
-    result = result.filter((t) => t.status === params.status);
+    query.status = params.status;
   }
 
-  return result;
+  if (params.isMyTasksOnly) {
+    query.isMyTasksOnly = "true";
+  }
+
+  if (params.parentId) {
+    query.parentId = params.parentId;
+  }
+
+  query.perPage = String(params.perPage || defaultPerPage);
+
+  if (params.cursor) {
+    query.cursor = params.cursor;
+  }
+
+  return query;
 }
 
 export const taskService = {
-  /**
-   * Lấy danh sách task từ backend API (hỗ trợ cursor pagination O(1) từ backend)
-   */
   async getTasks(params?: TaskFilterParams): Promise<TaskFetchResult> {
-    const query = new URLSearchParams();
+    const query = buildTaskQueryParams(params, 10);
+    const result = await apiClient.get<TaskCollectionDto>("/erp/tasks", { query });
 
-    if (params?.search && params.search.trim()) {
-      query.set("search", params.search.trim());
+    if (result.type !== "success" || !isTaskCollectionDto(result.data)) {
+      return { tasks: [], meta: null };
     }
 
-    if (params?.projectId && params.projectId !== "ALL") {
-      query.set("project_id", params.projectId);
-    }
-
-    if (params?.departmentId && params.departmentId !== "ALL") {
-      query.set("department_code", params.departmentId);
-    }
-
-    if (params?.assigneeId && params.assigneeId !== "ALL") {
-      query.set("assignee_id", params.assigneeId);
-    }
-
-    if (params?.priority && params.priority !== "ALL") {
-      query.set("priority", params.priority);
-    }
-
-    if (params?.status && params.status !== "ALL") {
-      query.set("status", params.status);
-    }
-
-    if (params?.isMyTasksOnly) {
-      query.set("my_tasks", "true");
-    }
-
-    query.set("per_page", String(params?.perPage || 10));
-
-    if (params?.cursor) {
-      query.set("cursor", params.cursor);
-    }
-
-    const qs = query.toString() ? `?${query.toString()}` : "";
-
-    try {
-      const res = await apiRequest<{
-        success: boolean;
-        data: Task[];
-        meta?: TaskPaginationMeta;
-      }>(`/erp/tasks${qs}`);
-
-      if (res && Array.isArray(res.data)) {
-        inMemoryTasks = res.data;
-        saveStoredTasks(res.data);
-        return { tasks: res.data, meta: res.meta || null };
-      }
-    } catch (error) {
-      console.warn("Không thể tải danh sách từ API /erp/tasks, fallback về bộ nhớ local:", error);
-      if (!inMemoryTasks || inMemoryTasks.length === 0) {
-        inMemoryTasks = getStoredTasks();
-      }
-      return { tasks: applyLocalFilters(inMemoryTasks, params), meta: null };
-    }
-
-    return { tasks: inMemoryTasks, meta: null };
+    return mapTaskCollectionResponse(result.data);
   },
 
-  /**
-   * Lấy danh sách công việc tối ưu cho bảng Kanban (~10 task mỗi cột)
-   */
   async getKanbanTasks(params?: TaskFilterParams): Promise<{
     tasks: Task[];
     cursors: Record<string, string | null>;
     hasMore: Record<string, boolean>;
   }> {
-    const query = new URLSearchParams();
+    const query = buildTaskQueryParams(params, 10);
+    const result = await apiClient.get<{
+      success?: boolean;
+      data: TaskDto[];
+      meta?: {
+        per_page: number;
+        cursors: Record<string, string | null>;
+        has_more: Record<string, boolean>;
+      };
+    }>("/erp/tasks/kanban", { query });
 
-    if (params?.search && params.search.trim()) {
-      query.set("search", params.search.trim());
-    }
-    if (params?.projectId && params.projectId !== "ALL") {
-      query.set("project_id", params.projectId);
-    }
-    if (params?.departmentId && params.departmentId !== "ALL") {
-      query.set("department_id", params.departmentId);
-    }
-    if (params?.assigneeId && params.assigneeId !== "ALL") {
-      query.set("assignee_id", params.assigneeId);
-    }
-    if (params?.priority && params.priority !== "ALL") {
-      query.set("priority", params.priority);
-    }
-    if (params?.status && params.status !== "ALL") {
-      query.set("status", params.status);
-    }
-    if (params?.isMyTasksOnly) {
-      query.set("my_tasks", "true");
-    }
-
-    query.set("per_page", String(params?.perPage || 10));
-
-    const qs = query.toString() ? `?${query.toString()}` : "";
-    try {
-      const res = await apiRequest<{
-        success: boolean;
-        data: Task[];
-        meta?: {
-          per_page: number;
-          cursors: Record<string, string | null>;
-          has_more: Record<string, boolean>;
-        };
-      }>(`/erp/tasks/kanban${qs}`);
-
-      if (res && Array.isArray(res.data)) {
-        inMemoryTasks = res.data;
-        saveStoredTasks(res.data);
-        return {
-          tasks: res.data,
-          cursors: res.meta?.cursors || {},
-          hasMore: res.meta?.has_more || {},
-        };
-      }
-    } catch (error) {
-      console.warn("Không thể tải danh sách kanban từ API /erp/tasks/kanban, fallback:", error);
+    if (result.type === "success" && Array.isArray(result.data?.data)) {
+      return {
+        tasks: result.data.data.map(mapTask),
+        cursors: result.data.meta?.cursors || {},
+        hasMore: result.data.meta?.has_more || {},
+      };
     }
 
     const fallback = await this.getTasks({ ...params, perPage: 10 });
@@ -222,209 +114,223 @@ export const taskService = {
     };
   },
 
-  /**
-   * Lấy chi tiết một task theo ID
-   */
   async getTaskById(id: string): Promise<Task | null> {
-    await fakeDelay();
-    const task = inMemoryTasks.find((t) => t.id === id);
-    return task ? { ...task } : null;
+    const result = await apiClient.get<{ success?: boolean; data: TaskDto }>(`/erp/tasks/${id}`);
+    if (result.type !== "success" || !isTaskDto(result.data?.data)) {
+      return null;
+    }
+    return mapTask(result.data.data);
   },
 
-  /**
-   * Tạo task mới
-   */
   async createTask(data: Omit<Task, "id" | "code" | "createdAt" | "updatedAt">): Promise<Task> {
-    try {
-      const res = await apiRequest<{ success: boolean; data: Task }>("/erp/tasks", {
-        method: "POST",
-        body: {
-          title: data.title,
-          description: data.description,
-          project_id: data.projectId,
-          project_key: data.projectKey,
-          department_id: data.departmentId,
-          priority: data.priority,
-          assignee_ids: data.assigneeIds,
-          due_date: data.dueDate,
-          start_date: data.startDate,
-          estimated_hours: data.estimatedHours,
-          tags: data.tags,
-          requires_approval: data.requiresApproval,
-          checklist: data.checklist,
-        },
-      });
-
-      if (res?.data) {
-        inMemoryTasks = [res.data, ...inMemoryTasks];
-        saveStoredTasks(inMemoryTasks);
-        return res.data;
-      }
-    } catch (error) {
-      console.warn("Lỗi khi gọi API tạo task, fallback local:", error);
-    }
-
-    const newId = `task-${Date.now()}`;
-    const pKey = data.projectKey || (data.projectId === "ERP_CORE" ? "ERP" : "ERP");
-    const newCode = `${pKey}-${Math.floor(100 + Math.random() * 900)}`;
-    const now = new Date().toISOString();
-
-    const newTask: Task = {
+    const scope = resolveProjectScope(data.projectId);
+    const payload = {
       ...data,
-      id: newId,
-      code: newCode,
-      createdAt: now,
-      updatedAt: now,
+      ...(scope.gov_project_id ? { gov_project_id: scope.gov_project_id } : {}),
+      ...(scope.project_id ? { project_id: scope.project_id } : {}),
     };
 
-    inMemoryTasks = [newTask, ...inMemoryTasks];
-    saveStoredTasks(inMemoryTasks);
-    return { ...newTask };
+    const result = await apiClient.postJson<{ success?: boolean; data: TaskDto }>("/erp/tasks", payload);
+    if (result.type !== "success" || !result.data?.data) {
+      throw new Error(result.type !== "success" ? result.error.message : "Không thể tạo công việc.");
+    }
+
+    return mapTask(result.data.data);
   },
 
-  /**
-   * Cập nhật thông tin task
-   */
+  async createSubtask(
+    parentId: string,
+    data: CreateSubtaskInput,
+    parentTask?: Partial<Task>
+  ): Promise<Task> {
+    const scope = parentTask?.projectId ? resolveProjectScope(parentTask.projectId) : {};
+    const payload = {
+      title: data.title,
+      description: data.description || "",
+      parent_id: parentId,
+      projectId: parentTask?.projectId || "",
+      projectName: parentTask?.projectName || "",
+      departmentId: parentTask?.departmentId || "",
+      priority: data.priority || parentTask?.priority || "MEDIUM",
+      status: data.status || parentTask?.status || undefined,
+      assigneeIds: data.assigneeIds || [],
+      startDate: data.startDate,
+      dueDate: data.dueDate || parentTask?.dueDate,
+      estimatedHours: data.estimatedHours,
+      checklist: [],
+      tags: parentTask?.tags || [],
+      ...(scope.gov_project_id ? { gov_project_id: scope.gov_project_id } : {}),
+      ...(scope.project_id ? { project_id: scope.project_id } : {}),
+    };
+
+    const result = await apiClient.postJson<{ success?: boolean; data: TaskDto }>(
+      `/erp/tasks/${parentId}/subtasks`,
+      payload
+    );
+
+    if (result.type === "success" && result.data?.data) {
+      return mapTask(result.data.data);
+    }
+
+    const fallbackResult = await apiClient.postJson<{ success?: boolean; data: TaskDto }>(
+      "/erp/tasks",
+      payload
+    );
+
+    if (fallbackResult.type === "success" && fallbackResult.data?.data) {
+      return mapTask(fallbackResult.data.data);
+    }
+
+    throw new Error(result.type !== "success" ? result.error.message : "Không thể tạo công việc con.");
+  },
+
+  async getSubtasks(parentId: string): Promise<Task[]> {
+    const result = await apiClient.get<{ success?: boolean; data: TaskDto[] }>(`/erp/tasks/${parentId}/subtasks`);
+    if (result.type === "success" && Array.isArray(result.data?.data)) {
+      return result.data.data.map(mapTask);
+    }
+
+    const fallback = await this.getTasks({ parentId });
+    return fallback.tasks;
+  },
+
   async updateTask(id: string, updates: Partial<Task>): Promise<Task> {
-    try {
-      const res = await apiRequest<{ success: boolean; data: Task }>(`/erp/tasks/${id}`, {
-        method: "PUT",
-        body: updates,
-      });
-
-      if (res?.data) {
-        const idx = inMemoryTasks.findIndex((t) => t.id === id);
-        if (idx !== -1) inMemoryTasks[idx] = res.data;
-        saveStoredTasks(inMemoryTasks);
-        return res.data;
-      }
-    } catch (error) {
-      console.warn("Lỗi khi gọi API update task, fallback local:", error);
-    }
-
-    const index = inMemoryTasks.findIndex((t) => t.id === id);
-    if (index === -1) {
-      throw new Error(`Không tìm thấy task với ID: ${id}`);
-    }
-
-    const updatedTask: Task = {
-      ...inMemoryTasks[index],
+    const scope = updates.projectId !== undefined ? resolveProjectScope(updates.projectId) : null;
+    const payload = {
       ...updates,
-      updatedAt: new Date().toISOString(),
+      ...(scope?.gov_project_id ? { gov_project_id: scope.gov_project_id } : {}),
+      ...(scope?.project_id ? { project_id: scope.project_id } : {}),
     };
 
-    inMemoryTasks[index] = updatedTask;
-    saveStoredTasks(inMemoryTasks);
-    return { ...updatedTask };
+    const result = await apiClient.putJson<{ success?: boolean; data: TaskDto }>(`/erp/tasks/${id}`, payload);
+    if (result.type !== "success" || !result.data?.data) {
+      throw new Error(result.type !== "success" ? result.error.message : `Không thể cập nhật công việc ID: ${id}`);
+    }
+
+    return mapTask(result.data.data);
   },
 
-  /**
-   * Cập nhật trạng thái task (khi kéo thả Kanban hoặc duyệt)
-   */
   async updateTaskStatus(
     id: string,
-    newStatus: TaskStatus,
+    newStatus: TaskStatus | string,
     resolution?: TaskResolution,
     resolutionNote?: string,
     closedById?: string
   ): Promise<Task> {
-    const payload: Partial<Task> = {
+    const payload = {
       status: newStatus,
-      resolution: newStatus === "DONE" ? "DONE" : newStatus === "CANCELLED" ? resolution || "WONT_FIX" : undefined,
-      resolutionNote: newStatus === "CANCELLED" ? resolutionNote : undefined,
-      closedById: newStatus === "CANCELLED" ? closedById : undefined,
+      resolution,
+      resolutionNote,
+      closedById,
     };
 
-    try {
-      const res = await apiRequest<{ success: boolean; data: Task }>(`/erp/tasks/${id}`, {
-        method: "PUT",
-        body: payload,
-      });
-
-      if (res?.data) {
-        const idx = inMemoryTasks.findIndex((t) => t.id === id);
-        if (idx !== -1) inMemoryTasks[idx] = res.data;
-        saveStoredTasks(inMemoryTasks);
-        return res.data;
-      }
-    } catch (error) {
-      console.warn("Lỗi khi gọi API updateStatus task, fallback local:", error);
+    const result = await apiClient.putJson<{ success?: boolean; data: TaskDto }>(`/erp/tasks/${id}`, payload);
+    if (result.type !== "success" || !result.data?.data) {
+      throw new Error(result.type !== "success" ? result.error.message : `Không thể cập nhật trạng thái công việc ID: ${id}`);
     }
 
-    const index = inMemoryTasks.findIndex((t) => t.id === id);
-    if (index === -1) {
-      throw new Error(`Không tìm thấy task với ID: ${id}`);
-    }
-
-    const current = inMemoryTasks[index];
-    const now = new Date().toISOString();
-
-    let resolvedVal = resolution || current.resolution;
-    if (newStatus === "DONE") {
-      resolvedVal = "DONE";
-    } else if (newStatus === "CANCELLED") {
-      resolvedVal = resolution || current.resolution || "WONT_FIX";
-    } else {
-      resolvedVal = undefined;
-    }
-
-    const updatedTask: Task = {
-      ...current,
-      status: newStatus,
-      isApproved: newStatus !== "PENDING_APPROVAL",
-      resolution: resolvedVal,
-      resolutionNote: newStatus === "CANCELLED" ? resolutionNote || current.resolutionNote : undefined,
-      closedAt: newStatus === "CANCELLED" || newStatus === "DONE" ? current.closedAt || now : undefined,
-      closedById: newStatus === "CANCELLED" ? closedById || current.closedById : undefined,
-      updatedAt: now,
-    };
-
-    inMemoryTasks[index] = updatedTask;
-    saveStoredTasks(inMemoryTasks);
-    return { ...updatedTask };
+    return mapTask(result.data.data);
   },
 
-  /**
-   * Đóng task kèm kết quả xử lý (Jira Resolution)
-   */
   async closeTask(
     id: string,
     resolution: TaskResolution,
     note?: string,
-    closedById?: string
+    closedById?: string,
+    targetStatus: string = "CANCELLED"
   ): Promise<Task> {
-    return this.updateTaskStatus(id, "CANCELLED", resolution, note, closedById);
+    return this.updateTaskStatus(id, targetStatus, resolution, note, closedById);
   },
 
-  /**
-   * Mở lại task đã đóng hoặc đã Done (Reopen Task sang To Do)
-   */
-  async reopenTask(id: string): Promise<Task> {
-    return this.updateTaskStatus(id, "TODO");
+  async reopenTask(id: string, targetStatus: string = "TODO"): Promise<Task> {
+    return this.updateTaskStatus(id, targetStatus);
   },
 
-  /**
-   * Xóa task
-   */
   async deleteTask(id: string): Promise<boolean> {
-    try {
-      await apiRequest(`/erp/tasks/${id}`, { method: "DELETE" });
-    } catch (error) {
-      console.warn("Lỗi khi gọi API xóa task, fallback local:", error);
+    const result = await apiClient.delete<{ success?: boolean }>(`/erp/tasks/${id}`);
+    return result.type === "success";
+  },
+
+  async uploadAttachments(taskId: string, files: File[]): Promise<TaskAttachment[]> {
+    if (!files || files.length === 0) return [];
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("files[]", file);
+    });
+    if (files.length === 1) {
+      formData.append("file", files[0]);
     }
 
-    const prevLen = inMemoryTasks.length;
-    inMemoryTasks = inMemoryTasks.filter((t) => t.id !== id);
-    saveStoredTasks(inMemoryTasks);
-    return inMemoryTasks.length < prevLen;
+    const result = await apiClient.postForm<{ success?: boolean; data: any }>(
+      `/erp/tasks/${taskId}/attachments`,
+      formData
+    );
+
+    if (result.type === "success" && result.data?.data) {
+      const rawList = Array.isArray(result.data.data) ? result.data.data : [result.data.data];
+      return rawList.map((item: any) => mapAttachment(item));
+    }
+
+    const govResult = await apiClient.postForm<{ success?: boolean; data: any }>(
+      "/erp/gov-projects/upload",
+      formData
+    );
+
+    if (govResult.type === "success" && govResult.data?.data) {
+      const rawList = Array.isArray(govResult.data.data) ? govResult.data.data : [govResult.data.data];
+      return rawList.map((item: any) => mapAttachment(item));
+    }
+
+    return [];
   },
 
-  /**
-   * Reset dữ liệu mock về ban đầu
-   */
+  async uploadAttachment(taskId: string, file: File): Promise<TaskAttachment> {
+    const list = await this.uploadAttachments(taskId, [file]);
+    if (!list[0]) {
+      throw new Error("Không thể tải lên tệp đính kèm.");
+    }
+    return list[0];
+  },
+
+  async deleteAttachment(taskId: string, attachmentId: string): Promise<boolean> {
+    const result = await apiClient.delete<{ success?: boolean }>(
+      `/erp/tasks/${taskId}/attachments/${attachmentId}`
+    );
+    return result.type === "success";
+  },
+
+  async getComments(taskId: string): Promise<TaskComment[]> {
+    const result = await apiClient.get<{ success?: boolean; data: TaskCommentDto[] }>(
+      `/erp/tasks/${taskId}/comments`
+    );
+
+    if (result.type === "success" && Array.isArray(result.data?.data)) {
+      return result.data.data.map(mapComment);
+    }
+
+    return [];
+  },
+
+  async addComment(taskId: string, content: string): Promise<TaskComment> {
+    const result = await apiClient.postJson<{ success?: boolean; data: TaskCommentDto }>(
+      `/erp/tasks/${taskId}/comments`,
+      { content }
+    );
+
+    if (result.type === "success" && result.data?.data && isTaskCommentDto(result.data.data)) {
+      return mapComment(result.data.data);
+    }
+
+    throw new Error(result.type !== "success" ? result.error.message : "Không thể gửi bình luận.");
+  },
+
+  async deleteComment(taskId: string, commentId: string): Promise<boolean> {
+    const result = await apiClient.delete<{ success?: boolean }>(
+      `/erp/tasks/${taskId}/comments/${commentId}`
+    );
+    return result.type === "success";
+  },
+
   async resetToDefault(): Promise<void> {
-    await fakeDelay();
-    inMemoryTasks = [...INITIAL_MOCK_TASKS];
-    saveStoredTasks(inMemoryTasks);
   },
 };

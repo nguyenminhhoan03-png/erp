@@ -6,6 +6,10 @@ import { GovCalendarStats } from "@/modules/gov-solutions/components/calendar/Go
 import { GovCalendarFullView, getCalendarDateRange } from "@/modules/gov-solutions/components/calendar/GovCalendarFullView";
 import { GovMeetingDialog } from "@/modules/gov-solutions/components/GovMeetingDialog";
 import { GovProjectDetailModal } from "@/modules/gov-solutions/components/GovProjectDetailModal";
+import {
+  CalendarFilterState,
+  DEFAULT_CALENDAR_FILTERS,
+} from "@/modules/gov-solutions/components/calendar/GovCalendarFilters";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import {
@@ -19,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 
 function GovCalendarContent() {
   const [mounted, setMounted] = React.useState(false);
@@ -26,9 +31,17 @@ function GovCalendarContent() {
   const [activeFilterConflict, setActiveFilterConflict] = React.useState(false);
   const [activeFilterType, setActiveFilterType] = React.useState<"ALL" | "UPCOMING" | "TRUC_TIEP" | "ONLINE">("ALL");
   const [openCreateDialog, setOpenCreateDialog] = React.useState(false);
+  const [selectedCreateDate, setSelectedCreateDate] = React.useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
-  // Khoảng ngày đang xem trên lịch (mặc định tháng hiện tại)
+  const handleOpenCreateForDate = (date?: Date) => {
+    setSelectedCreateDate(date || new Date());
+    setOpenCreateDialog(true);
+  };
+
+  const [isFilterOpen, setIsFilterOpen] = React.useState(false);
+  const [filters, setFilters] = React.useState<CalendarFilterState>(DEFAULT_CALENDAR_FILTERS);
+
   const [dateRange, setDateRange] = React.useState<{ start_date: string; end_date: string }>(() =>
     getCalendarDateRange(new Date(), "month")
   );
@@ -54,11 +67,9 @@ function GovCalendarContent() {
       try {
         const initialRange = getCalendarDateRange(new Date(), "month");
         setDateRange(initialRange);
+        await fetchInitial();
         await Promise.all([
-          fetchInitial(),
-          // Chỉ lấy đúng khoảng ngày của tháng đang hiển thị trên calendar
           fetchMasterCalendar({ all: 1, ...initialRange }),
-          // Lấy summary tổng quan toàn công ty cho các thẻ KPI phía trên
           fetchMasterCalendarSummary({ all: 1 }),
         ]);
       } catch (err) {
@@ -118,15 +129,38 @@ function GovCalendarContent() {
     setActiveFilterType(type as any);
   };
 
-  // Lọc danh sách meetings theo điều kiện
+  const handleFilterChange = (key: keyof CalendarFilterState, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleResetFilters = () => {
+    setFilters(DEFAULT_CALENDAR_FILTERS);
+  };
+
+  const activeDetailedFilterCount = React.useMemo(() => {
+    let count = 0;
+    if (filters.search) count++;
+    if (filters.solutionId !== "ALL") count++;
+    if (filters.meetingType !== "ALL") count++;
+    if (filters.status !== "ALL") count++;
+    return count;
+  }, [filters]);
+
   const filteredMeetings = React.useMemo(() => {
-    const nowTime = Date.now();
+    const now = new Date();
+    const nowTime = now.getTime();
+    const todayStart = startOfDay(now).getTime();
+    const todayEnd = endOfDay(now).getTime();
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 }).getTime();
+    const weekEnd = endOfWeek(now, { weekStartsOn: 1 }).getTime();
+    const monthStart = startOfMonth(now).getTime();
+    const monthEnd = endOfMonth(now).getTime();
+
     return meetings
       .map((m) => {
-        // Đảm bảo title luôn có giá trị để hiển thị
         return {
           ...m,
-          title: m.title || m.content || "Lịch làm việc với địa phương",
+          title: m.title || m.content || "Lịch làm việc",
           meetingType:
             m.meetingType ||
             (m.location &&
@@ -138,14 +172,20 @@ function GovCalendarContent() {
         };
       })
       .filter((m) => {
-        // 1. Lọc xung đột lịch
-        if (activeFilterConflict && !m.hasConflict) {
+        // Quick stats filter (Conflict)
+        const hasConflict = Boolean(
+          m.hasConflict ||
+          (m as any).has_conflict ||
+          ((m as any).conflicts && (m as any).conflicts.length > 0)
+        );
+        if (activeFilterConflict && !hasConflict) {
           return false;
         }
 
-        // 2. Lọc theo hình thức / thời gian
+        const mTime = new Date(m.scheduledAt?.replace(" ", "T") || 0).getTime();
+
+        // Quick stats filter (Type / Upcoming)
         if (activeFilterType === "UPCOMING") {
-          const mTime = new Date(m.scheduledAt?.replace(" ", "T") || 0).getTime();
           if (mTime < nowTime || m.status === "DONE" || m.status === "CANCELLED") {
             return false;
           }
@@ -159,6 +199,49 @@ function GovCalendarContent() {
           }
         }
 
+        // Detailed filter: Solution (Dự án CĐS)
+        if (filters.solutionId !== "ALL") {
+          if (String(m.solutionId || "") !== String(filters.solutionId)) {
+            return false;
+          }
+        }
+
+
+        // Detailed filter: Meeting Type
+        if (filters.meetingType !== "ALL") {
+          if (m.meetingType !== filters.meetingType) {
+            return false;
+          }
+        }
+
+        // Detailed filter: Status
+        if (filters.status !== "ALL") {
+          if (m.status !== filters.status) {
+            return false;
+          }
+        }
+
+        // Detailed filter: Free text search
+        if (filters.search.trim()) {
+          const q = filters.search.toLowerCase().trim();
+          const matchTitle = m.title?.toLowerCase().includes(q);
+          const matchContent = m.content?.toLowerCase().includes(q);
+          const matchLocation = m.location?.toLowerCase().includes(q);
+          const matchProvince = m.provinceName?.toLowerCase().includes(q);
+          const matchHost = m.hostName?.toLowerCase().includes(q);
+          const matchContact = m.contactPerson?.toLowerCase().includes(q);
+          if (
+            !matchTitle &&
+            !matchContent &&
+            !matchLocation &&
+            !matchProvince &&
+            !matchHost &&
+            !matchContact
+          ) {
+            return false;
+          }
+        }
+
         return true;
       })
       .sort((a, b) => {
@@ -166,7 +249,7 @@ function GovCalendarContent() {
         const timeB = new Date(b.scheduledAt?.replace(" ", "T") || 0).getTime();
         return timeA - timeB;
       });
-  }, [meetings, activeFilterConflict, activeFilterType]);
+  }, [meetings, activeFilterConflict, activeFilterType, filters, projects]);
 
   const handleUpdateStatus = async (
     meetingId: string,
@@ -182,6 +265,8 @@ function GovCalendarContent() {
               ? "Đã hủy lịch công tác"
               : "Đã cập nhật trạng thái"
         );
+        fetchMasterCalendar({ all: 1, ...dateRange });
+        fetchMasterCalendarSummary({ all: 1 });
       }
     } catch {
       toast.error("Có lỗi xảy ra khi cập nhật trạng thái");
@@ -211,7 +296,7 @@ function GovCalendarContent() {
 
   if (!mounted || isLoading) {
     return (
-      <div className="space-y-4 max-w-[1650px] mx-auto pb-10 p-6 animate-pulse">
+      <div className="space-y-4 w-full pb-10 p-6 animate-pulse">
         <div className="h-10 w-72 bg-muted/60 rounded-xl" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
           <div className="h-24 bg-muted/40 rounded-2xl" />
@@ -225,8 +310,7 @@ function GovCalendarContent() {
   }
 
   return (
-    <div className="space-y-4 max-w-[1650px] mx-auto pb-10">
-      {/* Header trang */}
+    <div className="space-y-4 w-full pb-10">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -256,21 +340,17 @@ function GovCalendarContent() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Bỏ view mode toggles ở đây */}
-
-          {/* Đặt lịch công tác mới */}
           <Button
             size="sm"
             onClick={() => setOpenCreateDialog(true)}
             className="h-9 text-xs font-semibold gap-1.5 rounded-xl shadow-2xs cursor-pointer"
           >
             <CalendarPlus className="h-4 w-4" />
-            <span>+ Đặt lịch công tác</span>
+            <span>+ Đặt lịch họp</span>
           </Button>
         </div>
       </div>
 
-      {/* 4 Thẻ KPI Chỉ số nhanh */}
       <GovCalendarStats
         meetings={meetings}
         summary={calendarSummary}
@@ -280,33 +360,58 @@ function GovCalendarContent() {
         onSelectFilterType={handleSelectFilterType}
       />
 
-      {/* Thanh thông báo bộ lọc đang áp dụng */}
-      {(activeFilterConflict || activeFilterType !== "ALL") && (
-        <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-primary/5 border border-primary/20 text-xs">
-          <div className="flex items-center gap-2">
+
+
+      {(activeFilterConflict || activeFilterType !== "ALL" || (!isFilterOpen && activeDetailedFilterCount > 0)) && (
+        <div className="flex flex-wrap items-center justify-between px-3.5 py-2 rounded-xl bg-primary/5 border border-primary/20 text-xs gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-primary">Đang lọc danh sách:</span>
-            <Badge variant="secondary" className="font-normal text-xs">
-              {activeFilterConflict
-                ? "Các cuộc họp bị trùng lịch"
-                : activeFilterType === "UPCOMING"
-                  ? "Chỉ các cuộc họp sắp diễn ra"
+            {activeFilterConflict && (
+              <Badge variant="secondary" className="font-normal text-xs">
+                Trùng lịch
+              </Badge>
+            )}
+            {activeFilterType !== "ALL" && (
+              <Badge variant="secondary" className="font-normal text-xs">
+                {activeFilterType === "UPCOMING"
+                  ? "Sắp diễn ra"
                   : activeFilterType === "TRUC_TIEP"
-                    ? "Chuyến công tác trực tiếp tại tỉnh"
-                    : "Họp trực tuyến qua Meet / Zoom"}
-            </Badge>
+                    ? "Trực tiếp tại tỉnh"
+                    : "Họp trực tuyến"}
+              </Badge>
+            )}
+            {!isFilterOpen && activeDetailedFilterCount > 0 && (
+              <Badge variant="secondary" className="font-normal text-xs">
+                {activeDetailedFilterCount} bộ lọc nâng cao
+              </Badge>
+            )}
             <span className="text-muted-foreground">({filteredMeetings.length} cuộc họp phù hợp)</span>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setActiveFilterConflict(false);
-              setActiveFilterType("ALL");
-            }}
-            className="h-7 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-          >
-            Xóa bộ lọc
-          </Button>
+
+          <div className="flex items-center gap-2">
+            {!isFilterOpen && activeDetailedFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsFilterOpen(true)}
+                className="h-7 text-xs text-primary hover:underline cursor-pointer"
+              >
+                Mở bộ lọc
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setActiveFilterConflict(false);
+                setActiveFilterType("ALL");
+                handleResetFilters();
+              }}
+              className="h-7 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              Xóa tất cả bộ lọc
+            </Button>
+          </div>
         </div>
       )}
 
@@ -318,17 +423,30 @@ function GovCalendarContent() {
           onDeleteMeeting={handleDeleteMeeting}
           onSelectProject={handleSelectProject}
           onRangeChange={handleRangeChange}
+          onAddMeeting={handleOpenCreateForDate}
           isLoading={isCalendarLoading}
+          filterContext={{
+            isFilterOpen,
+            setIsFilterOpen,
+            activeFilterCount: activeDetailedFilterCount,
+            filters,
+            onFilterChange: handleFilterChange,
+            onResetFilters: handleResetFilters,
+            projects,
+            totalMatches: filteredMeetings.length,
+          }}
         />
       </div>
 
-      {/* Modal Đặt lịch mới */}
       <GovMeetingDialog
         open={openCreateDialog}
-        onOpenChange={setOpenCreateDialog}
+        onOpenChange={(open) => {
+          setOpenCreateDialog(open);
+          if (!open) setSelectedCreateDate(null);
+        }}
+        defaultDate={selectedCreateDate}
       />
 
-      {/* Modal Chi tiết Dự án tỉnh (khi bấm vào tên tỉnh trên lịch) */}
       <GovProjectDetailModal />
     </div>
   );
@@ -338,7 +456,7 @@ export default function GovCalendarPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="space-y-4 max-w-[1650px] mx-auto pb-10 p-6 animate-pulse">
+        <div className="space-y-4 w-full pb-10 p-6 animate-pulse">
           <div className="h-10 w-72 bg-muted/60 rounded-xl" />
           <div className="h-28 w-full bg-muted/40 rounded-2xl" />
           <div className="h-96 w-full bg-muted/30 rounded-2xl" />

@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   Calendar,
-  CheckSquare,
   Clock,
   MessageSquare,
   Send,
@@ -13,6 +12,7 @@ import {
   XCircle,
   AlertCircle,
   User,
+  UserPlus,
   Shield,
   ArrowRight,
   RotateCcw,
@@ -20,6 +20,11 @@ import {
   HelpCircle,
   Check,
   ChevronDown,
+  Pencil,
+  CornerDownRight,
+  ArrowUpRight,
+  X,
+  Search,
 } from "lucide-react";
 import { useTaskStore } from "../store/taskStore";
 import { useUserStore } from "@/shared/store/useUserStore";
@@ -27,11 +32,11 @@ import {
   TASK_STATUS_CONFIG,
   TASK_PRIORITY_CONFIG,
   TASK_RESOLUTION_CONFIG,
-  KANBAN_COLUMNS,
 } from "../constants";
-import { TaskResolution } from "../types";
+import { TaskPriority, TaskResolution } from "../types";
+import type { User as UserModel } from "@/shared/types";
 import { can, checkTaskTransitionPermission } from "@/shared/permissions/can";
-import { formatDate, formatDateTime, isOverdue } from "@/lib/date";
+import { formatDate, formatDateTime, formatRelativeTime, isOverdue } from "@/lib/date";
 import {
   Dialog,
   DialogContent,
@@ -47,116 +52,173 @@ import {
 } from "@/shared/components/ui/dropdown-menu";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { UserAvatar } from "@/shared/components/UserAvatar";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { TaskSubtasksSection } from "./detail/TaskSubtasksSection";
+import { TaskAttachmentsSection } from "./detail/TaskAttachmentsSection";
+import { TaskCommentsSection } from "./detail/TaskCommentsSection";
+
+function removeVietnameseTones(str: string): string {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
 
 export function TaskDialog() {
   const {
     activeTask,
     isDetailOpen,
     closeDetail,
-    toggleChecklistItem,
     updateTask,
     addComment,
     moveTask,
     deleteTask,
-    approveTask,
-    rejectTask,
     closeTask,
     reopenTask,
     projects,
+    statuses,
+    tasks,
+    openDetail,
   } = useTaskStore();
-  const { currentUser, getUserById, departments } = useUserStore();
+  const { currentUser, getUserById, departments, users } = useUserStore();
 
-  const [newChecklistTitle, setNewChecklistTitle] = React.useState("");
-  const [newComment, setNewComment] = React.useState("");
-  const [mockComments, setMockComments] = React.useState<
-    Array<{ id: string; authorName: string; text: string; time: string }>
-  >([]);
-
-  // State đóng task (Resolution Modal)
   const [isCloseModalOpen, setIsCloseModalOpen] = React.useState(false);
   const [selectedResolution, setSelectedResolution] = React.useState<TaskResolution>("NOT_A_BUG");
   const [resolutionNote, setResolutionNote] = React.useState("");
 
-  // Reset or load comments when activeTask changes
+  const [isEditingTitle, setIsEditingTitle] = React.useState(false);
+  const [titleDraft, setTitleDraft] = React.useState("");
+  const [isEditingDesc, setIsEditingDesc] = React.useState(false);
+  const [descDraft, setDescDraft] = React.useState("");
+  const [isEditingDueDate, setIsEditingDueDate] = React.useState(false);
+  const [assigneeSearch, setAssigneeSearch] = React.useState("");
+  const [reportSearch, setReportSearch] = React.useState("");
+  const assigneeSearchRef = React.useRef<HTMLInputElement>(null);
+  const reportSearchRef = React.useRef<HTMLInputElement>(null);
+
+  const filteredAssigneeUsers = React.useMemo(() => {
+    if (!assigneeSearch.trim()) return users;
+    const term = assigneeSearch.trim().toLowerCase();
+    const termNoAccent = removeVietnameseTones(term);
+    return users.filter((u) => {
+      const name = (u.name || "").toLowerCase();
+      const title = (u.title || "").toLowerCase();
+      const email = (u.email || "").toLowerCase();
+      return (
+        name.includes(term) ||
+        removeVietnameseTones(name).includes(termNoAccent) ||
+        title.includes(term) ||
+        removeVietnameseTones(title).includes(termNoAccent) ||
+        email.includes(term)
+      );
+    });
+  }, [users, assigneeSearch]);
+
+  const filteredReportUsers = React.useMemo(() => {
+    if (!reportSearch.trim()) return users;
+    const term = reportSearch.trim().toLowerCase();
+    const termNoAccent = removeVietnameseTones(term);
+    return users.filter((u) => {
+      const name = (u.name || "").toLowerCase();
+      const title = (u.title || "").toLowerCase();
+      const email = (u.email || "").toLowerCase();
+      return (
+        name.includes(term) ||
+        removeVietnameseTones(name).includes(termNoAccent) ||
+        title.includes(term) ||
+        removeVietnameseTones(title).includes(termNoAccent) ||
+        email.includes(term)
+      );
+    });
+  }, [users, reportSearch]);
+
   React.useEffect(() => {
     if (activeTask) {
-      setMockComments([
-        {
-          id: "cmt-1",
-          authorName: "Trần Minh Quân",
-          text: `Đã cập nhật mục tiêu dự án và giao nhiệm vụ ${activeTask.code}.`,
-          time: "Hôm qua lúc 14:30",
-        },
-      ]);
-      setNewComment("");
+      setTitleDraft(activeTask.title);
+      setDescDraft(activeTask.description || "");
+      setIsEditingTitle(false);
+      setIsEditingDesc(false);
+      setIsEditingDueDate(false);
     }
   }, [activeTask?.id]);
 
   if (!activeTask) return null;
 
-  const statusCfg = TASK_STATUS_CONFIG[activeTask.status];
+  const customStatus = statuses?.find((s) => s.key === activeTask.status);
+  const statusCfg = (activeTask.status && TASK_STATUS_CONFIG[activeTask.status])
+    ? {
+      ...TASK_STATUS_CONFIG[activeTask.status],
+      ...(customStatus ? { label: customStatus.name, color: customStatus.color } : {})
+    }
+    : {
+      id: activeTask.status || "TODO",
+      label: customStatus?.name || activeTask.status || "Chưa phân loại",
+      color: customStatus?.color || "#64748b",
+      badgeBg: "bg-slate-100 dark:bg-slate-800/80",
+      badgeText: "text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 font-medium",
+      dotColor: "bg-slate-500",
+      borderColor: "border-slate-300 dark:border-slate-800",
+      description: customStatus?.name || activeTask.status || "Chưa phân loại",
+    };
+
+  const availableStatuses = (statuses && statuses.length > 0)
+    ? statuses.map((s) => ({
+      key: s.key,
+      label: s.name,
+      color: s.color,
+      category: s.category,
+    }))
+    : [];
+
   const priorityCfg = TASK_PRIORITY_CONFIG[activeTask.priority];
-  const dept = departments.find((d) => d.id === activeTask.departmentId);
+  const dept = departments.find((d) => String(d.id) === String(activeTask.departmentId));
+  const departmentName = activeTask.departmentName || dept?.name || dept?.code;
   const project = projects.find((p) => p.id === activeTask.projectId);
   const creator = getUserById(activeTask.creatorId);
-  const overdue = isOverdue(activeTask.dueDate, activeTask.status);
+  const rawReportToIds = Array.isArray(activeTask.reportToIds)
+    ? activeTask.reportToIds.map(String)
+    : (Array.isArray(activeTask.reportTos)
+      ? activeTask.reportTos.map((u) => String(u.id))
+      : (Array.isArray(activeTask.reporters)
+        ? activeTask.reporters.map((u) => String(u.id))
+        : (activeTask.reportToId ? [String(activeTask.reportToId)] : [])));
+  const reportToUsers: UserModel[] = (
+    (Array.isArray(activeTask.reportTos) && activeTask.reportTos.length > 0)
+      ? activeTask.reportTos
+      : (Array.isArray(activeTask.reporters) && activeTask.reporters.length > 0)
+        ? activeTask.reporters
+        : rawReportToIds.map((id) => getUserById(String(id))).filter(Boolean)
+  ) as UserModel[];
+  const overdue = isOverdue(activeTask.dueDate, activeTask.status, activeTask.closedAt);
 
-  const assignees = activeTask.assigneeIds
-    .map((id) => getUserById(id))
-    .filter(Boolean);
+  const rawAssigneeIds = Array.isArray(activeTask.assigneeIds)
+    ? activeTask.assigneeIds
+    : (Array.isArray(activeTask.assignees) ? activeTask.assignees.map((u) => u.id) : []);
 
-  const handleAddComment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
+  const assignees = (Array.isArray(activeTask.assignees) && activeTask.assignees.length > 0)
+    ? activeTask.assignees
+    : rawAssigneeIds
+      .map((id) => getUserById(String(id)))
+      .filter(Boolean);
 
-    setMockComments((prev) => [
-      ...prev,
-      {
-        id: `cmt-${Date.now()}`,
-        authorName: currentUser.name,
-        text: newComment.trim(),
-        time: "Vừa xong",
-      },
-    ]);
-    addComment(activeTask.id, currentUser.id, newComment.trim());
-    setNewComment("");
-    toast.success("Đã đăng bình luận");
-  };
+
 
   const handleQuickStatusChange = async (toStatus: typeof activeTask.status) => {
     const res = await moveTask(activeTask.id, toStatus, currentUser);
     if (!res.success) {
       toast.error("Không được phép", { description: res.reason });
     } else {
+      const targetLabel = statuses?.find((s) => s.key === toStatus)?.name || TASK_STATUS_CONFIG[toStatus]?.label || toStatus;
       toast.success("Cập nhật thành công", {
-        description: `Chuyển sang: ${TASK_STATUS_CONFIG[toStatus].label}`,
+        description: `Chuyển sang: ${targetLabel}`,
       });
-    }
-  };
-
-  const handleApprove = async () => {
-    const res = await approveTask(activeTask.id, currentUser);
-    if (res.success) {
-      toast.success("Đã phê duyệt công việc!");
-      closeDetail();
-    } else {
-      toast.error(res.reason || "Lỗi phê duyệt");
-    }
-  };
-
-  const handleReject = async () => {
-    const res = await rejectTask(activeTask.id, currentUser);
-    if (res.success) {
-      toast.info("Đã từ chối công việc");
-      closeDetail();
-    } else {
-      toast.error(res.reason || "Lỗi từ chối");
     }
   };
 
@@ -194,8 +256,111 @@ export function TaskDialog() {
     }
   };
 
+  const parentTask =
+    activeTask.parent ||
+    tasks.find((t) => String(t.id) === String(activeTask.parentId));
+
+  const parentCode =
+    parentTask?.code ||
+    (activeTask.code && activeTask.code.includes(".")
+      ? activeTask.code.split(".").slice(0, -1).join(".")
+      : `#${activeTask.parentId}`);
+
+  const parentTitle = parentTask?.title;
+
+  const handleNavigateToParent = async () => {
+    if (parentTask) {
+      openDetail(parentTask);
+      return;
+    }
+    if (activeTask.parentId) {
+      try {
+        const { apiRequest } = await import("@/lib/api-client");
+        const res = await apiRequest<{ success: boolean; data: any }>(`/erp/tasks/${activeTask.parentId}`);
+        if (res?.data) {
+          openDetail(res.data);
+          return;
+        }
+      } catch {
+      }
+    }
+    toast.info(`Công việc cha mã: ${parentCode}`);
+  };
+
+  const handleSaveTitle = async () => {
+    if (!titleDraft.trim() || titleDraft.trim() === activeTask.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+    try {
+      await updateTask(activeTask.id, { title: titleDraft.trim() });
+      toast.success("Đã cập nhật tiêu đề!");
+    } catch {
+      toast.error("Không thể cập nhật tiêu đề.");
+    } finally {
+      setIsEditingTitle(false);
+    }
+  };
+
+  const handleSaveDescription = async () => {
+    try {
+      await updateTask(activeTask.id, { description: descDraft.trim() });
+      toast.success("Đã lưu mô tả công việc!");
+      setIsEditingDesc(false);
+    } catch {
+      toast.error("Không thể lưu mô tả.");
+    }
+  };
+
+  const handleUpdatePriority = async (newPriority: TaskPriority) => {
+    if (newPriority === activeTask.priority) return;
+    try {
+      await updateTask(activeTask.id, { priority: newPriority });
+      toast.success(`Đã đổi ưu tiên: ${TASK_PRIORITY_CONFIG[newPriority]?.label}`);
+    } catch {
+      toast.error("Không thể cập nhật độ ưu tiên.");
+    }
+  };
+
+  const handleSaveDueDate = async (newDateStr: string) => {
+    if (!newDateStr) return;
+    try {
+      await updateTask(activeTask.id, { dueDate: new Date(newDateStr).toISOString() });
+      toast.success("Đã cập nhật hạn chót!");
+      setIsEditingDueDate(false);
+    } catch {
+      toast.error("Không thể cập nhật hạn chót.");
+    }
+  };
+
+  const handleToggleAssignee = async (userId: string) => {
+    const isAssigned = rawAssigneeIds.includes(userId);
+    const next = isAssigned
+      ? rawAssigneeIds.filter((id) => id !== userId)
+      : [...rawAssigneeIds, userId];
+    try {
+      await updateTask(activeTask.id, { assigneeIds: next });
+      toast.success(isAssigned ? "Đã gỡ người thực hiện" : "Đã thêm người thực hiện");
+    } catch {
+      toast.error("Lỗi cập nhật người thực hiện");
+    }
+  };
+
+  const handleToggleReportTo = async (userId: string) => {
+    const isReportTo = rawReportToIds.includes(userId);
+    const next = isReportTo
+      ? rawReportToIds.filter((id) => id !== userId)
+      : [...rawReportToIds, userId];
+    try {
+      await updateTask(activeTask.id, { reportToIds: next, reportToId: next[0] || undefined });
+      toast.success(isReportTo ? "Đã gỡ người nhận báo cáo" : "Đã thêm người nhận báo cáo");
+    } catch {
+      toast.error("Lỗi cập nhật người báo cáo");
+    }
+  };
+
   const canDelete = can(currentUser, "delete", "task", { task: activeTask });
-  const isAssignee = activeTask.assigneeIds.includes(currentUser.id);
+  const isAssignee = rawAssigneeIds.includes(currentUser.id);
   const isManagerOfDept =
     currentUser.role === "MANAGER" &&
     currentUser.departmentId === activeTask.departmentId;
@@ -204,114 +369,201 @@ export function TaskDialog() {
   return (
     <Dialog open={isDetailOpen} onOpenChange={(open) => !open && closeDetail()}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-        {/* Header */}
         <div className="p-6 pb-4 border-b border-border/80 bg-muted/20">
-          <div className="flex items-center gap-2 mb-2 flex-wrap pr-12">
-            <span className="font-mono font-bold text-sm text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-              {activeTask.code}
-            </span>
-            {project && (
-              <Badge
-                variant="outline"
-                className={cn("text-xs font-semibold", project.badgeBg, project.badgeText)}
+          {activeTask.parentId && (
+            <div className="w-full flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+              <CornerDownRight className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span>Việc cha:</span>
+              <button
+                type="button"
+                onClick={handleNavigateToParent}
+                className="font-mono font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer bg-primary/10 px-1.5 py-0.5 rounded text-[11px]"
+                title="Bấm để xem công việc cha"
               >
-                {project.category === "GOV_SOLUTION" ? `🏛️ ${project.name}` : project.name}
-              </Badge>
-            )}
-            {dept && (
-              <Badge
-                variant="outline"
-                className="text-xs"
-                style={{
-                  borderColor: `${dept.color}40`,
-                  color: dept.color,
-                  backgroundColor: `${dept.color}10`,
-                }}
-              >
-                {dept.name}
-              </Badge>
-            )}
-            <Badge
-              variant="outline"
-              className={cn("text-xs", priorityCfg.badgeBg, priorityCfg.badgeText)}
-            >
-              Ưu tiên: {priorityCfg.label}
-            </Badge>
+                <span>{parentCode}</span>
+                {parentTitle && <span className="font-normal text-foreground truncate max-w-xs">({parentTitle})</span>}
+              </button>
+            </div>
+          )}
 
-            {activeTask.status === "CANCELLED" && activeTask.resolution && TASK_RESOLUTION_CONFIG[activeTask.resolution] && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-xs font-semibold",
-                  TASK_RESOLUTION_CONFIG[activeTask.resolution].badgeBg,
-                  TASK_RESOLUTION_CONFIG[activeTask.resolution].badgeText
-                )}
-                title={TASK_RESOLUTION_CONFIG[activeTask.resolution].description}
-              >
-                {TASK_RESOLUTION_CONFIG[activeTask.resolution].label}
-              </Badge>
-            )}
-
-            {/* Trạng thái công việc dạng Dropdown Menu (chuẩn Jira / Linear) */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ml-auto transition-all cursor-pointer shadow-2xs hover:opacity-90 shrink-0",
-                    statusCfg.badgeBg,
-                    statusCfg.badgeText,
-                    statusCfg.borderColor
-                  )}
-                  title="Bấm để chuyển trạng thái công việc nhanh"
+          <div className="flex items-center justify-between gap-2.5 mb-2.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono font-bold text-sm text-primary bg-primary/10 px-2 py-0.5 rounded-md shrink-0">
+                {activeTask.code}
+              </span>
+              {project && (
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs font-semibold shrink-0", project.badgeBg, project.badgeText)}
                 >
-                  <span className={cn("w-2 h-2 rounded-full shrink-0", statusCfg.dotColor)} />
-                  <span>{statusCfg.label}</span>
-                  <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 p-1">
-                <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Chuyển trạng thái công việc
-                </div>
-                {KANBAN_COLUMNS.map((st) => {
-                  const cfg = TASK_STATUS_CONFIG[st];
-                  const isCurrent = activeTask.status === st;
-                  return (
+                  {project.category === "GOV_SOLUTION"
+                    ? `🏛️ ${project.code ? `[${project.code}] ` : ""}${project.name}`
+                    : (project.code ? `[${project.code}] ${project.name}` : project.name)}
+                </Badge>
+              )}
+              {departmentName && (
+                <Badge
+                  variant="outline"
+                  className="text-xs shrink-0"
+                  style={{
+                    borderColor: dept?.color ? `${dept.color}40` : undefined,
+                    color: dept?.color || undefined,
+                    backgroundColor: dept?.color ? `${dept.color}10` : undefined,
+                  }}
+                >
+                  {departmentName}
+                </Badge>
+              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn("text-xs px-2 py-0.5 rounded border font-medium flex items-center gap-1 cursor-pointer hover:opacity-85 transition-opacity shrink-0", priorityCfg.badgeBg, priorityCfg.badgeText)}
+                    title="Bấm để đổi mức độ ưu tiên"
+                  >
+                    <span>Ưu tiên: {priorityCfg.label}</span>
+                    <ChevronDown className="h-3 w-3 opacity-60" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-40">
+                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Đổi mức độ ưu tiên
+                  </div>
+                  {(["LOW", "MEDIUM", "HIGH", "URGENT"] as TaskPriority[]).map((p) => (
                     <DropdownMenuItem
-                      key={st}
-                      onClick={() => {
-                        if (isCurrent) return;
-                        if (st === "CANCELLED") {
-                          setIsCloseModalOpen(true);
-                        } else {
-                          handleQuickStatusChange(st);
-                        }
-                      }}
-                      className={cn(
-                        "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer",
-                        isCurrent && "bg-muted font-bold text-primary"
-                      )}
+                      key={p}
+                      onClick={() => handleUpdatePriority(p)}
+                      className={cn("text-xs cursor-pointer flex items-center justify-between", activeTask.priority === p && "font-bold bg-muted")}
                     >
-                      <span className={cn("w-2 h-2 rounded-full shrink-0", cfg.dotColor)} />
-                      <span className="flex-1">{cfg.label}</span>
-                      {isCurrent && <Check className="h-3.5 w-3.5 text-primary" />}
+                      <span>{TASK_PRIORITY_CONFIG[p].label}</span>
+                      {activeTask.priority === p && <Check className="h-3.5 w-3.5 text-primary" />}
                     </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {activeTask.resolution && activeTask.resolution !== "DONE" && TASK_RESOLUTION_CONFIG[activeTask.resolution] && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-xs font-semibold shrink-0",
+                    TASK_RESOLUTION_CONFIG[activeTask.resolution].badgeBg,
+                    TASK_RESOLUTION_CONFIG[activeTask.resolution].badgeText
+                  )}
+                  title={TASK_RESOLUTION_CONFIG[activeTask.resolution].description}
+                >
+                  {TASK_RESOLUTION_CONFIG[activeTask.resolution].label}
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 pr-8">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-2xs hover:opacity-90 shrink-0",
+                      statusCfg.badgeBg,
+                      statusCfg.badgeText,
+                      statusCfg.borderColor
+                    )}
+                    title="Bấm để chuyển trạng thái công việc nhanh"
+                  >
+                    <span className={cn("w-2 h-2 rounded-full shrink-0", statusCfg.dotColor)} />
+                    <span>{statusCfg.label}</span>
+                    <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 p-1">
+                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Chuyển trạng thái công việc
+                  </div>
+                  {availableStatuses.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground text-center">
+                      Chưa có cột trạng thái nào được cấu hình
+                    </div>
+                  ) : (
+                    availableStatuses.map((st) => {
+                      const cfg = TASK_STATUS_CONFIG[st.key];
+                      const isCurrent = activeTask.status === st.key;
+                      return (
+                        <DropdownMenuItem
+                          key={st.key}
+                          onClick={() => {
+                            if (isCurrent) return;
+                            const isCancelOrClose = st.key === "CANCELLED" || st.label.toLowerCase().includes("hủy") || st.label.toLowerCase().includes("đóng");
+                            if (isCancelOrClose) {
+                              setIsCloseModalOpen(true);
+                            } else {
+                              handleQuickStatusChange(st.key);
+                            }
+                          }}
+                          className={cn(
+                            "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer",
+                            isCurrent && "bg-muted font-bold text-primary"
+                          )}
+                        >
+                          <span
+                            className={cn("w-2 h-2 rounded-full shrink-0", !st.color && (cfg?.dotColor || "bg-slate-500"))}
+                            style={{ backgroundColor: st.color || undefined }}
+                          />
+                          <span className="flex-1">{st.label}</span>
+                          {isCurrent && <Check className="h-3.5 w-3.5 text-primary" />}
+                        </DropdownMenuItem>
+                      );
+                    })
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
-          <DialogTitle className="text-xl font-bold leading-snug text-foreground">
-            {activeTask.title}
-          </DialogTitle>
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2 mt-2">
+              <Input
+                autoFocus
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveTitle();
+                  if (e.key === "Escape") setIsEditingTitle(false);
+                }}
+                className="text-lg font-bold h-10 bg-background"
+                placeholder="Nhập tiêu đề công việc..."
+              />
+              <Button size="sm" onClick={handleSaveTitle} className="h-10 px-3 shrink-0">
+                Lưu
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setIsEditingTitle(false)} className="h-10 px-3 shrink-0">
+                Hủy
+              </Button>
+            </div>
+          ) : (
+            <div
+              className="group inline-flex items-center gap-2 mt-1 cursor-pointer max-w-full"
+              onClick={() => {
+                setTitleDraft(activeTask.title);
+                setIsEditingTitle(true);
+              }}
+            >
+              <DialogTitle className="text-xl font-bold leading-snug text-foreground group-hover:text-primary transition-colors">
+                {activeTask.title}
+              </DialogTitle>
+              <button
+                type="button"
+                className="p-1 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-primary transition-all shrink-0 cursor-pointer"
+                title="Sửa tiêu đề"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Scrollable Content */}
         <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
-          {/* Closed / Cancelled Banner (Jira Resolution) */}
-          {activeTask.status === "CANCELLED" && (
+          {(activeTask.status === "CANCELLED" || (activeTask.resolution && activeTask.resolution !== "DONE")) && (
             <div className="p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-900/60 space-y-2.5">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
@@ -366,231 +618,430 @@ export function TaskDialog() {
               )}
             </div>
           )}
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-muted/40 border border-border/60 text-xs">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-muted-foreground font-medium">Người tạo / Giao việc:</span>
-              <div className="flex items-center gap-2">
-                <UserAvatar user={creator} size="sm" />
-                <span className="font-medium text-foreground">{creator?.name || "Chưa rõ"}</span>
-                <span className="text-muted-foreground">({creator?.title})</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <span className="text-muted-foreground font-medium">Người thực hiện:</span>
-              <div className="flex items-center gap-2 flex-wrap">
-                {assignees.length === 0 ? (
-                  <span className="text-muted-foreground italic">Chưa giao cho ai</span>
-                ) : (
-                  assignees.map((u) => (
-                    <div key={u!.id} className="flex items-center gap-1.5 bg-background px-2 py-1 rounded-md border border-border/60">
-                      <UserAvatar user={u} size="sm" />
-                      <span className="font-medium text-foreground">{u!.name}</span>
+          <div className="rounded-xl border border-border/70 bg-card/60 p-4 shadow-2xs space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-primary" />
+                  <span>Người thực hiện</span>
+                  <span className="text-muted-foreground/60">({assignees.length})</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap min-h-7">
+                  {assignees.map((u) => (
+                    <div
+                      key={u!.id}
+                      className="inline-flex items-center gap-1.5 py-0.5 pl-1 pr-2 rounded-full bg-background border border-border/80 shadow-2xs hover:border-primary/40 transition-colors text-xs font-medium"
+                    >
+                      <UserAvatar user={u} size="sm" className="h-5 w-5" />
+                      <span className="text-foreground">{u!.name}</span>
+                      {u!.id === currentUser.id && (
+                        <span className="text-[9px] px-1 py-0.2 rounded-full bg-primary/10 text-primary font-bold">
+                          Tôi
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAssignee(String(u!.id))}
+                        className="text-muted-foreground hover:text-rose-500 rounded-full hover:bg-rose-500/10 p-0.5 transition-colors cursor-pointer"
+                        title="Bỏ gán"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </div>
-                  ))
-                )}
+                  ))}
+
+                  <DropdownMenu onOpenChange={(open) => { if (!open) setAssigneeSearch(""); }}>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border border-dashed transition-all cursor-pointer text-xs",
+                          assignees.length === 0
+                            ? "h-7 px-3 border-primary/50 text-primary bg-primary/5 hover:bg-primary/10 font-medium"
+                            : "h-6 px-2 border-border hover:border-primary hover:text-primary hover:bg-primary/5 text-muted-foreground"
+                        )}
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>{assignees.length === 0 ? "Gán người làm" : "Thêm"}</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="w-64 p-1.5 flex flex-col"
+                      onOpenAutoFocus={(e) => {
+                        e.preventDefault();
+                        assigneeSearchRef.current?.focus();
+                        setTimeout(() => {
+                          assigneeSearchRef.current?.focus();
+                        }, 10);
+                      }}
+                    >
+                      <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Chọn người thực hiện
+                      </div>
+                      <div className="px-1 pb-1.5 pt-0.5 border-b border-border/50 mb-1">
+                        <div className="relative flex items-center">
+                          <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                          <Input
+                            ref={assigneeSearchRef}
+                            type="text"
+                            value={assigneeSearch}
+                            onChange={(e) => setAssigneeSearch(e.target.value)}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Tìm nhân sự, chức vụ..."
+                            className="h-8 pl-8 pr-7 text-xs bg-muted/40 hover:bg-muted/60 focus:bg-background border-border/60 rounded-lg shadow-none"
+                            autoFocus
+                          />
+                          {assigneeSearch && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAssigneeSearch("");
+                              }}
+                              className="absolute right-2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
+                              title="Xóa tìm kiếm"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto space-y-0.5 pr-0.5">
+                        {filteredAssigneeUsers.length === 0 ? (
+                          <div className="py-4 text-center text-xs text-muted-foreground">
+                            Không tìm thấy nhân sự phù hợp
+                          </div>
+                        ) : (
+                          filteredAssigneeUsers.map((u) => {
+                            const isAssigned = rawAssigneeIds.includes(String(u.id));
+                            const isSelf = String(u.id) === String(currentUser.id);
+                            return (
+                              <DropdownMenuItem
+                                key={u.id}
+                                onSelect={(e) => e.preventDefault()}
+                                onClick={() => handleToggleAssignee(String(u.id))}
+                                className="flex items-center gap-2 cursor-pointer text-xs rounded-lg py-1.5"
+                              >
+                                <UserAvatar user={u} size="sm" className="h-6 w-6" />
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className="truncate font-medium">{u.name}</span>
+                                    {isSelf && (
+                                      <span className="text-[9px] px-1 py-0.2 rounded-full bg-primary/10 text-primary font-bold">
+                                        Tôi
+                                      </span>
+                                    )}
+                                  </div>
+                                  {u.title && (
+                                    <span className="text-[10px] text-muted-foreground truncate">{u.title}</span>
+                                  )}
+                                </div>
+                                {isAssigned && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                              </DropdownMenuItem>
+                            );
+                          })
+                        )}
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Báo cáo cho</span>
+                  <span className="text-muted-foreground/60">({reportToUsers.length})</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap min-h-7">
+                  {reportToUsers.map((u) => (
+                    <div
+                      key={u!.id}
+                      className="inline-flex items-center gap-1.5 py-0.5 pl-1 pr-2 rounded-full bg-background border border-border/80 shadow-2xs hover:border-blue-500/40 transition-colors text-xs font-medium"
+                    >
+                      <UserAvatar user={u} size="sm" className="h-5 w-5" />
+                      <span className="text-foreground">{u!.name}</span>
+                      {u!.id === currentUser.id && (
+                        <span className="text-[9px] px-1 py-0.2 rounded-full bg-blue-500/10 text-blue-600 font-bold">
+                          Tôi
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleReportTo(String(u!.id))}
+                        className="text-muted-foreground hover:text-rose-500 rounded-full hover:bg-rose-500/10 p-0.5 transition-colors cursor-pointer"
+                        title="Bỏ người này"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+
+                  <DropdownMenu onOpenChange={(open) => { if (!open) setReportSearch(""); }}>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border border-dashed transition-all cursor-pointer text-xs",
+                          reportToUsers.length === 0
+                            ? "h-7 px-3 border-blue-400/50 text-blue-600 bg-blue-500/5 hover:bg-blue-500/10 font-medium"
+                            : "h-6 px-2 border-border hover:border-blue-500 hover:text-blue-500 hover:bg-blue-500/5 text-muted-foreground"
+                        )}
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>{reportToUsers.length === 0 ? "Chọn người nhận" : "Thêm"}</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="w-64 p-1.5 flex flex-col"
+                      onOpenAutoFocus={(e) => {
+                        e.preventDefault();
+                        reportSearchRef.current?.focus();
+                        setTimeout(() => {
+                          reportSearchRef.current?.focus();
+                        }, 10);
+                      }}
+                    >
+                      <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Chọn người nhận báo cáo
+                      </div>
+                      <div className="px-1 pb-1.5 pt-0.5 border-b border-border/50 mb-1">
+                        <div className="relative flex items-center">
+                          <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                          <Input
+                            ref={reportSearchRef}
+                            type="text"
+                            value={reportSearch}
+                            onChange={(e) => setReportSearch(e.target.value)}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Tìm nhân sự, chức vụ..."
+                            className="h-8 pl-8 pr-7 text-xs bg-muted/40 hover:bg-muted/60 focus:bg-background border-border/60 rounded-lg shadow-none"
+                            autoFocus
+                          />
+                          {reportSearch && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReportSearch("");
+                              }}
+                              className="absolute right-2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
+                              title="Xóa tìm kiếm"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto space-y-0.5 pr-0.5">
+                        {filteredReportUsers.length === 0 ? (
+                          <div className="py-4 text-center text-xs text-muted-foreground">
+                            Không tìm thấy nhân sự phù hợp
+                          </div>
+                        ) : (
+                          filteredReportUsers.map((u) => {
+                            const isSelected = rawReportToIds.includes(String(u.id));
+                            const isSelf = String(u.id) === String(currentUser.id);
+                            return (
+                              <DropdownMenuItem
+                                key={u.id}
+                                onSelect={(e) => e.preventDefault()}
+                                onClick={() => handleToggleReportTo(String(u.id))}
+                                className="flex items-center gap-2 cursor-pointer text-xs rounded-lg py-1.5"
+                              >
+                                <UserAvatar user={u} size="sm" className="h-6 w-6" />
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className="truncate font-medium">{u.name}</span>
+                                    {isSelf && (
+                                      <span className="text-[9px] px-1 py-0.2 rounded-full bg-blue-500/10 text-blue-600 font-bold">
+                                        Tôi
+                                      </span>
+                                    )}
+                                  </div>
+                                  {u.title && (
+                                    <span className="text-[10px] text-muted-foreground truncate">{u.title}</span>
+                                  )}
+                                </div>
+                                {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                              </DropdownMenuItem>
+                            );
+                          })
+                        )}
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <span className="text-muted-foreground font-medium">Hạn hoàn thành:</span>
-              <div
-                className={cn(
-                  "flex items-center gap-1.5 font-medium",
-                  overdue ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-foreground"
-                )}
-              >
-                <Calendar className="h-4 w-4" />
-                <span>{formatDate(activeTask.dueDate, "EEEE, dd/MM/yyyy")}</span>
-                {overdue && (
-                  <Badge variant="destructive" className="text-[10px] h-4.5 px-1.5 ml-1">
-                    Trễ hạn
-                  </Badge>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <span className="text-muted-foreground font-medium">Ngày khởi tạo:</span>
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span>{formatDateTime(activeTask.createdAt)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              Mô tả chi tiết công việc
-            </h4>
-            <div className="p-4 rounded-xl border border-border/80 bg-card text-sm leading-relaxed whitespace-pre-line text-foreground/90">
-              {activeTask.description || "Không có mô tả chi tiết."}
-            </div>
-          </div>
-
-          {/* Checklist */}
-          {(() => {
-            const completedCount = activeTask.checklist.filter((i) => i.isCompleted).length;
-            const totalCount = activeTask.checklist.length;
-            const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-            const handleAddChecklist = async (e?: React.FormEvent) => {
-              if (e) e.preventDefault();
-              if (!newChecklistTitle.trim()) return;
-              const newItem = {
-                id: `chk-${Date.now()}`,
-                title: newChecklistTitle.trim(),
-                isCompleted: false,
-              };
-              await updateTask(activeTask.id, {
-                checklist: [...activeTask.checklist, newItem],
-              });
-              setNewChecklistTitle("");
-              toast.success("Đã thêm hạng mục công việc con");
-            };
-
-            const handleDeleteChecklist = async (itemId: string) => {
-              await updateTask(activeTask.id, {
-                checklist: activeTask.checklist.filter((i) => i.id !== itemId),
-              });
-              toast.info("Đã xóa hạng mục công việc con");
-            };
-
-            return (
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <CheckSquare className="h-3.5 w-3.5 text-primary" />
-                    <span>Danh sách hạng mục công việc (Checklist)</span>
-                  </h4>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-primary font-mono">{percent}%</span>
-                    <span className="text-xs font-medium text-muted-foreground">
-                      ({completedCount} / {totalCount} hoàn tất)
-                    </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-border/50">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Send className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Người tạo task</span>
+                </span>
+                <div className="flex items-center gap-2.5 py-0.5">
+                  <UserAvatar user={creator} size="sm" className="h-7 w-7" />
+                  <div className="flex flex-col leading-tight">
+                    <span className="font-semibold text-foreground text-xs">{creator?.name || "Chưa rõ"}</span>
+                    <span className="text-[11px] text-muted-foreground">{creator?.title || "Thành viên"}</span>
                   </div>
                 </div>
+              </div>
 
-                {/* Progress bar */}
-                <div className="w-full bg-muted/60 h-1.5 rounded-full overflow-hidden mb-3">
-                  <div
-                    className={cn(
-                      "h-full transition-all duration-300 rounded-full",
-                      percent === 100 ? "bg-emerald-500" : "bg-primary"
-                    )}
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
-
-                <div className="space-y-1.5 rounded-xl border border-border/80 p-3 bg-card shadow-2xs">
-                  {activeTask.checklist.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic text-center py-2">
-                      Chưa có hạng mục công việc con nào.
-                    </p>
-                  ) : (
-                    activeTask.checklist.map((item) => (
-                      <div
-                        key={item.id}
-                        className="group flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-muted/40 transition-colors select-none"
-                      >
-                        <label className="flex items-start gap-3 flex-1 cursor-pointer">
-                          <Checkbox
-                            checked={item.isCompleted}
-                            onCheckedChange={() => toggleChecklistItem(activeTask.id, item.id)}
-                            className="mt-0.5"
-                          />
-                          <span
-                            className={cn(
-                              "text-sm text-foreground leading-snug",
-                              item.isCompleted && "line-through text-muted-foreground opacity-70"
-                            )}
-                          >
-                            {item.title}
-                          </span>
-                        </label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteChecklist(item.id)}
-                          className="h-7 w-7 text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Xóa hạng mục"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))
-                  )}
-
-                  {/* Inline Add Checklist Input */}
-                  <form onSubmit={handleAddChecklist} className="flex items-center gap-2 pt-2 mt-1 border-t border-border/60">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-rose-500" />
+                  <span>Hạn hoàn thành</span>
+                </span>
+                {isEditingDueDate ? (
+                  <div className="flex items-center gap-1.5">
                     <Input
-                      placeholder="Thêm hạng mục công việc con mới..."
-                      value={newChecklistTitle}
-                      onChange={(e) => setNewChecklistTitle(e.target.value)}
-                      className="h-8 text-xs bg-background/60"
+                      type="date"
+                      autoFocus
+                      defaultValue={activeTask.dueDate ? activeTask.dueDate.split("T")[0] : ""}
+                      onChange={(e) => handleSaveDueDate(e.target.value)}
+                      className="h-7 text-xs bg-background"
                     />
                     <Button
-                      type="submit"
+                      type="button"
+                      variant="ghost"
                       size="sm"
-                      variant="outline"
-                      className="h-8 text-xs px-3 gap-1 shrink-0 rounded-lg hover:bg-primary/5"
+                      onClick={() => setIsEditingDueDate(false)}
+                      className="h-7 text-xs px-2 cursor-pointer"
                     >
-                      <Plus className="h-3.5 w-3.5 text-primary" />
-                      <span>Thêm</span>
+                      Hủy
                     </Button>
-                  </form>
-                </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => setIsEditingDueDate(true)}
+                    className={cn(
+                      "inline-flex items-center gap-2 px-2.5 py-1 rounded-lg border border-border/70 hover:border-primary/50 bg-background/80 hover:bg-background cursor-pointer group transition-all text-xs w-fit",
+                      overdue ? "border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20" : ""
+                    )}
+                    title="Bấm để đổi hạn hoàn thành"
+                  >
+                    <Calendar className={cn("h-3.5 w-3.5", overdue ? "text-rose-500" : "text-muted-foreground group-hover:text-primary")} />
+                    <span className={cn("font-medium", overdue ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground")}>
+                      {formatDate(activeTask.dueDate, "EEEE, dd/MM/yyyy")}
+                    </span>
+                    {overdue && (
+                      <Badge variant="destructive" className="text-[9px] h-4 px-1.5">
+                        Trễ hạn
+                      </Badge>
+                    )}
+                    <Pencil className="h-3 w-3 text-muted-foreground opacity-40 group-hover:opacity-100 ml-0.5 transition-opacity" />
+                  </div>
+                )}
               </div>
-            );
-          })()}
-
-          {/* Comments & Discussion */}
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-              <MessageSquare className="h-3.5 w-3.5" />
-              <span>Trao đổi & Bình luận ({mockComments.length})</span>
-            </h4>
-
-            {/* Existing comments */}
-            <div className="space-y-3 mb-4">
-              {mockComments.map((cmt) => (
-                <div key={cmt.id} className="flex gap-2.5 p-3 rounded-xl bg-muted/40 border border-border/50 text-xs">
-                  <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                    {cmt.authorName[0]}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground">{cmt.authorName}</span>
-                      <span className="text-[10px] text-muted-foreground">{cmt.time}</span>
-                    </div>
-                    <p className="text-foreground/90">{cmt.text}</p>
-                  </div>
-                </div>
-              ))}
             </div>
 
-            {/* Comment form */}
-            <form onSubmit={handleAddComment} className="flex gap-2">
-              <Input
-                placeholder="Nhập nội dung trao đổi hoặc cập nhật tiến độ..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                className="h-9 text-xs rounded-xl"
-              />
-              <Button type="submit" size="sm" className="h-9 px-3 gap-1 rounded-xl shrink-0">
-                <Send className="h-3.5 w-3.5" />
-                <span>Gửi</span>
-              </Button>
-            </form>
+            <div className="flex items-center justify-between pt-2.5 border-t border-border/50 text-[11px] text-muted-foreground flex-wrap gap-2.5">
+              <div className="flex items-center gap-3.5 flex-wrap">
+                <div className="flex items-center gap-1.5" title={formatDateTime(activeTask.createdAt)}>
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground/70" />
+                  <span>Khởi tạo: <strong className="text-foreground font-medium">{formatDateTime(activeTask.createdAt)}</strong></span>
+                </div>
+                {activeTask.updatedAt && (
+                  <div className="flex items-center gap-1.5" title={`Thời điểm kéo/cập nhật gần nhất: ${formatDateTime(activeTask.updatedAt)}`}>
+                    <span>Trạng thái cập nhật: <strong className="text-foreground font-medium">{formatRelativeTime(activeTask.updatedAt)}</strong> ({formatDateTime(activeTask.updatedAt)})</span>
+                  </div>
+                )}
+                {activeTask.closedAt && (
+                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400" title={`Hoàn thành lúc: ${formatDateTime(activeTask.closedAt)}`}>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Hoàn thành: <strong className="font-medium text-emerald-600 dark:text-emerald-400">{formatDateTime(activeTask.closedAt)}</strong></span>
+                  </div>
+                )}
+              </div>
+              {activeTask.estimatedHours ? (
+                <div className="flex items-center gap-1 shrink-0">
+                  <span>Ước tính giờ làm: <strong className="text-foreground font-medium">{activeTask.estimatedHours} giờ</strong></span>
+                </div>
+              ) : null}
+            </div>
           </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Mô tả chi tiết công việc
+              </h4>
+              {!isEditingDesc && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDescDraft(activeTask.description || "");
+                    setIsEditingDesc(true);
+                  }}
+                  className="h-6 text-xs text-primary gap-1 px-2 cursor-pointer"
+                >
+                  <Pencil className="h-3 w-3" />
+                  <span>Chỉnh sửa</span>
+                </Button>
+              )}
+            </div>
+            {isEditingDesc ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={descDraft}
+                  onChange={(e) => setDescDraft(e.target.value)}
+                  placeholder="Nhập mô tả chi tiết công việc..."
+                  rows={4}
+                  className="text-sm bg-background"
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingDesc(false)}
+                    className="h-7 text-xs"
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleSaveDescription}
+                    className="h-7 text-xs px-3"
+                  >
+                    Lưu mô tả
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => {
+                  setDescDraft(activeTask.description || "");
+                  setIsEditingDesc(true);
+                }}
+                className="p-4 rounded-xl border border-border/80 bg-card text-sm leading-relaxed whitespace-pre-line text-foreground/90 cursor-pointer hover:border-primary/50 transition-colors"
+                title="Bấm để chỉnh sửa mô tả"
+              >
+                {activeTask.description || (
+                  <span className="text-muted-foreground italic">Chưa có mô tả chi tiết. Bấm vào đây để thêm...</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <TaskSubtasksSection task={activeTask} />
+
+          <TaskAttachmentsSection task={activeTask} />
+
+          <TaskCommentsSection task={activeTask} />
         </div>
 
-        {/* Action Footer */}
         <div className="p-4 border-t border-border/80 bg-muted/20 flex items-center justify-between gap-2">
-          {/* Left: Tùy chọn Xóa task (chỉ cho phép Admin/Trưởng phòng khi cần dọn dẹp task rác) */}
           <div>
             {canDelete && (
               <Button
@@ -606,7 +1057,6 @@ export function TaskDialog() {
             )}
           </div>
 
-          {/* Right: Nút Đóng cửa sổ */}
           <div className="flex items-center gap-2">
             <Button
               variant="default"
@@ -619,7 +1069,6 @@ export function TaskDialog() {
           </div>
         </div>
 
-        {/* Modal Chọn Resolution Chuẩn Jira khi Đóng Task */}
         {isCloseModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
             <div className="bg-background border border-border/80 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4">

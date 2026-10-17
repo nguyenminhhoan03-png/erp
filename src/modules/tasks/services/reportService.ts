@@ -1,9 +1,8 @@
-import { INITIAL_MOCK_REPORTS } from "../mock-data";
 import { DailyReport } from "../types";
 import { DepartmentId } from "@/shared/types";
 
-const DELAY_MIN = 250;
-const DELAY_MAX = 500;
+const DELAY_MIN = 100;
+const DELAY_MAX = 200;
 
 function fakeDelay(): Promise<void> {
   const ms = Math.floor(Math.random() * (DELAY_MAX - DELAY_MIN + 1)) + DELAY_MIN;
@@ -15,12 +14,6 @@ const STORAGE_KEY = "erp_reports_clean_v1";
 function getStoredReports(): DailyReport[] {
   if (typeof window !== "undefined") {
     try {
-      localStorage.removeItem("erp_reports_cache_v1");
-    } catch {
-      // Ignore
-    }
-
-    try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
         const parsed = JSON.parse(data);
@@ -29,19 +22,16 @@ function getStoredReports(): DailyReport[] {
         }
       }
     } catch {
-      // Ignore
     }
   }
   return [];
 }
-
 
 function saveStoredReports(reports: DailyReport[]): void {
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
     } catch {
-      // Ignore
     }
   }
 }
@@ -49,9 +39,6 @@ function saveStoredReports(reports: DailyReport[]): void {
 let inMemoryReports: DailyReport[] = getStoredReports();
 
 export const reportService = {
-  /**
-   * Lấy danh sách báo cáo theo bộ lọc
-   */
   async getReports(params?: {
     userId?: string;
     departmentId?: DepartmentId | "ALL";
@@ -78,9 +65,6 @@ export const reportService = {
     return list;
   },
 
-  /**
-   * Lấy báo cáo của 1 user theo ngày cụ thể (để kiểm tra xem đã nộp chưa)
-   */
   async getReportByUserAndDate(userId: string, date: string): Promise<DailyReport | null> {
     await fakeDelay();
     if (!inMemoryReports || inMemoryReports.length === 0) {
@@ -90,24 +74,17 @@ export const reportService = {
     return report ? { ...report } : null;
   },
 
-  /**
-   * Khôi phục toàn bộ danh sách báo cáo mẫu
-   */
   async resetToDefault(): Promise<void> {
     await fakeDelay();
-    inMemoryReports = [...INITIAL_MOCK_REPORTS];
+    inMemoryReports = [];
     saveStoredReports(inMemoryReports);
   },
 
-  /**
-   * Lưu bản nháp hoặc nộp báo cáo
-   */
   async saveReport(
     reportData: Omit<DailyReport, "id" | "createdAt" | "updatedAt"> & { id?: string }
   ): Promise<DailyReport> {
     await fakeDelay();
 
-    // Kiểm tra nộp trùng trong cùng một ngày nếu tạo mới
     const existing = inMemoryReports.find(
       (r) =>
         r.userId === reportData.userId &&
@@ -123,7 +100,6 @@ export const reportService = {
     let savedReport: DailyReport;
 
     if (reportData.id) {
-      // Update
       const idx = inMemoryReports.findIndex((r) => r.id === reportData.id);
       if (idx === -1) {
         throw new Error("Không tìm thấy báo cáo để cập nhật");
@@ -136,7 +112,6 @@ export const reportService = {
       } as DailyReport;
       inMemoryReports[idx] = savedReport;
     } else {
-      // Create new
       savedReport = {
         ...reportData,
         id: `report-${Date.now()}`,
@@ -149,5 +124,66 @@ export const reportService = {
 
     saveStoredReports(inMemoryReports);
     return { ...savedReport };
+  },
+
+  async getRecentReports(userId: string, limit = 5): Promise<DailyReport[]> {
+    await fakeDelay();
+    if (!inMemoryReports || inMemoryReports.length === 0) {
+      inMemoryReports = getStoredReports();
+    }
+    return inMemoryReports
+      .filter((r) => r.userId === userId && r.status !== "DRAFT" && r.status !== "draft")
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, limit);
+  },
+
+  async addFeedback(
+    reportId: string,
+    feedback: { feedbackBy: string; feedbackContent: string }
+  ): Promise<DailyReport> {
+    await fakeDelay();
+    if (!inMemoryReports || inMemoryReports.length === 0) {
+      inMemoryReports = getStoredReports();
+    }
+    const idx = inMemoryReports.findIndex((r) => r.id === reportId);
+    if (idx === -1) {
+      throw new Error("Không tìm thấy báo cáo");
+    }
+    const newFeedback = {
+      id: `fb-${Date.now()}`,
+      dailyReportId: reportId,
+      feedbackBy: feedback.feedbackBy,
+      feedbackContent: feedback.feedbackContent,
+      createdAt: new Date().toISOString(),
+    };
+    const report = inMemoryReports[idx];
+    const feedbacks = report.feedbacks ? [...report.feedbacks, newFeedback] : [newFeedback];
+    const updated = {
+      ...report,
+      feedbacks,
+      updatedAt: new Date().toISOString(),
+    };
+    inMemoryReports[idx] = updated;
+    saveStoredReports(inMemoryReports);
+    return { ...updated };
+  },
+
+  async updateReportStatus(reportId: string, status: DailyReport["status"]): Promise<DailyReport> {
+    await fakeDelay();
+    if (!inMemoryReports || inMemoryReports.length === 0) {
+      inMemoryReports = getStoredReports();
+    }
+    const idx = inMemoryReports.findIndex((r) => r.id === reportId);
+    if (idx === -1) {
+      throw new Error("Không tìm thấy báo cáo");
+    }
+    const updated = {
+      ...inMemoryReports[idx],
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    inMemoryReports[idx] = updated;
+    saveStoredReports(inMemoryReports);
+    return { ...updated };
   },
 };

@@ -12,9 +12,6 @@ interface PermissionGuardProps {
   fallback?: React.ReactNode;
 }
 
-/**
- * Component bọc bảo vệ giao diện theo quyền hạn (Declarative RBAC Guard)
- */
 export function PermissionGuard({
   permission,
   context,
@@ -32,9 +29,6 @@ export function PermissionGuard({
   return <>{children}</>;
 }
 
-/**
- * Custom Hook kiểm tra quyền nhanh trong React Component
- */
 export function usePermission(
   permission: PermissionKey,
   context?: PermissionContext

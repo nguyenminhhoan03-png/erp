@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { GovMeetingSchedule } from "../../types";
-import { Calendar, dateFnsLocalizer, Event as CalendarEvent, Views } from "react-big-calendar";
+import { Calendar, dateFnsLocalizer, Event as CalendarEvent, Views, DateHeaderProps } from "react-big-calendar";
 import { format, parse, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay, endOfDay, getDay } from "date-fns";
 import { vi } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -15,9 +15,29 @@ import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useUserStore } from "@/shared/store/useUserStore";
 import { UserAvatar } from "@/shared/components/UserAvatar";
-import { MapPin, Video, UserCheck, Calendar as CalendarIcon, Check, X, Trash2, ExternalLink, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { MapPin, Video, UserCheck, Calendar as CalendarIcon, Check, X, Trash2, ExternalLink, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Filter, Plus, Info, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DLTM_STAGES } from "../../constants";
+import { GovCalendarFilters, CalendarFilterState } from "./GovCalendarFilters";
+import { DltmProject } from "../../types";
+
+export interface CalendarFilterContextType {
+  isFilterOpen: boolean;
+  setIsFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  activeFilterCount: number;
+  filters: CalendarFilterState;
+  onFilterChange: (key: keyof CalendarFilterState, value: string) => void;
+  onResetFilters: () => void;
+  projects?: DltmProject[];
+  totalMatches: number;
+}
+
+export const CalendarFilterContext = React.createContext<CalendarFilterContextType | null>(null);
+
+export interface CalendarActionContextType {
+  onAddMeeting?: (date?: Date) => void;
+}
+export const CalendarActionContext = React.createContext<CalendarActionContextType>({});
 
 const locales = {
   "vi": vi,
@@ -36,15 +56,12 @@ export function getCalendarDateRange(currentDate: Date, currentView: string) {
   let end: Date;
 
   if (currentView === "month") {
-    // Tháng: Thứ 2 đầu tiên của lưới đến Chủ nhật cuối cùng của lưới (chuẩn của react-big-calendar)
     start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
     end = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 });
   } else if (currentView === "week") {
-    // Tuần: Thứ 2 đến Chủ nhật của tuần đó
     start = startOfWeek(currentDate, { weekStartsOn: 1 });
     end = endOfWeek(currentDate, { weekStartsOn: 1 });
   } else {
-    // Ngày hoặc Danh sách (Agenda)
     start = startOfDay(currentDate);
     end = currentView === "agenda" ? endOfMonth(currentDate) : endOfDay(currentDate);
   }
@@ -62,7 +79,9 @@ interface GovCalendarFullViewProps {
   onSelectProject?: (projectId: string) => void;
   onUpdateMeeting?: (meetingId: string, updates: any, projectId?: string) => Promise<boolean | void>;
   onRangeChange?: (range: { start_date: string; end_date: string }) => void;
+  onAddMeeting?: (date?: Date) => void;
   isLoading?: boolean;
+  filterContext?: CalendarFilterContextType;
 }
 
 interface MappedEvent extends CalendarEvent {
@@ -71,17 +90,49 @@ interface MappedEvent extends CalendarEvent {
   isConflict: boolean;
 }
 
+function CustomMonthDateHeader({ date, label, isOffRange, onDrillDown }: DateHeaderProps) {
+  const { onAddMeeting } = React.useContext(CalendarActionContext);
+
+  return (
+    <div className="flex items-center justify-between px-1.5 py-0.5 w-full group/date-header">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onAddMeeting?.(date);
+        }}
+        title={`Thêm lịch công tác ngày ${format(date, "dd/MM/yyyy")}`}
+        className="opacity-40 group-hover/date-header:opacity-100 hover:!opacity-100 h-5 w-5 rounded-md flex items-center justify-center text-muted-foreground hover:text-white hover:bg-primary transition-all duration-150 cursor-pointer shadow-2xs"
+      >
+        <Plus className="h-3 w-3 stroke-[2.5]" />
+      </button>
+
+      <button
+        type="button"
+        onClick={onDrillDown}
+        className={cn(
+          "rbc-button-link font-bold text-xs hover:text-primary transition-colors",
+          isOffRange ? "text-muted-foreground/40" : "text-foreground"
+        )}
+      >
+        {label}
+      </button>
+    </div>
+  );
+}
+
 function CustomToolbar(toolbar: any) {
+  const filterCtx = React.useContext(CalendarFilterContext);
   const goToBack = () => toolbar.onNavigate('PREV');
   const goToNext = () => toolbar.onNavigate('NEXT');
   const goToCurrent = () => {
     toolbar.onNavigate('TODAY');
-    // Toggle class trên wrapper của calendar để trigger animation
     setTimeout(() => {
       const calendar = document.querySelector('.rbc-calendar');
       if (calendar) {
         calendar.classList.remove('flash-today-trigger');
-        void (calendar as HTMLElement).offsetWidth; // trigger reflow
+        void (calendar as HTMLElement).offsetWidth; 
         calendar.classList.add('flash-today-trigger');
       }
     }, 10);
@@ -107,40 +158,90 @@ function CustomToolbar(toolbar: any) {
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 bg-muted/20 p-2 rounded-xl shadow-2xs">
-      <div className="flex items-center gap-1.5">
-        <Button variant="outline" size="sm" onClick={goToCurrent} className="h-8 font-semibold rounded-lg">
-          Hôm nay
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg bg-card shadow-2xs" onClick={goToBack}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg bg-card shadow-2xs" onClick={goToNext}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+    <div className="space-y-3 mb-4 rbc-toolbar-sticky">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-muted/20 p-2 rounded-xl shadow-2xs">
+        <div className="flex items-center justify-between w-full sm:w-auto gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="sm" onClick={goToCurrent} className="h-8 font-semibold rounded-lg text-xs">
+              Hôm nay
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg bg-card shadow-2xs" onClick={goToBack}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg bg-card shadow-2xs" onClick={goToNext}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="sm:hidden text-center font-bold text-primary text-sm">
+            {label()}
+          </div>
+        </div>
+
+        <div className="hidden sm:block text-center font-bold text-primary">
+          {label()}
+        </div>
+
+        <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+          <div className="flex items-center bg-card rounded-lg shadow-2xs p-1 overflow-x-auto max-w-full">
+            {["month", "week", "day", "agenda"].map((viewName) => (
+              <button
+                key={viewName}
+                type="button"
+                className={cn(
+                  "px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap",
+                  toolbar.view === viewName
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+                onClick={() => toolbar.onView(viewName)}
+              >
+                {toolbar.localizer.messages[viewName]}
+              </button>
+            ))}
+          </div>
+
+          {filterCtx && (
+            <Button
+              variant={filterCtx.isFilterOpen || filterCtx.activeFilterCount > 0 ? "default" : "outline"}
+              size="sm"
+              onClick={() => filterCtx.setIsFilterOpen(!filterCtx.isFilterOpen)}
+              className="h-8.5 text-xs font-semibold gap-1.5 rounded-lg shadow-2xs cursor-pointer shrink-0"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              <span>Bộ lọc</span>
+              {filterCtx.activeFilterCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-4.5 px-1.5 text-[10px] ml-0.5 font-bold"
+                >
+                  {filterCtx.activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="text-center font-bold text-primary">
-        {label()}
-      </div>
+      {(toolbar.view === "month" || toolbar.view === "week") && (
+        <div className="sm:hidden flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-primary/5 border border-primary/15 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1 font-medium text-foreground">
+            👉 Vuốt ngang bảng để xem đủ 7 ngày
+          </span>
+          <span className="text-primary font-semibold text-[10px]">Cuộn ↔</span>
+        </div>
+      )}
 
-      <div className="flex items-center bg-card rounded-lg shadow-2xs p-1">
-        {["month", "week", "day", "agenda"].map((viewName) => (
-          <button
-            key={viewName}
-            type="button"
-            className={cn(
-              "px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer",
-              toolbar.view === viewName
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-            onClick={() => toolbar.onView(viewName)}
-          >
-            {toolbar.localizer.messages[viewName]}
-          </button>
-        ))}
-      </div>
+      {filterCtx && filterCtx.isFilterOpen && (
+        <GovCalendarFilters
+          filters={filterCtx.filters}
+          onChange={filterCtx.onFilterChange}
+          onReset={filterCtx.onResetFilters}
+          onClose={() => filterCtx.setIsFilterOpen(false)}
+          projects={filterCtx.projects}
+          totalMatches={filterCtx.totalMatches}
+        />
+      )}
     </div>
   );
 }
@@ -152,7 +253,9 @@ export function GovCalendarFullView({
   onSelectProject,
   onUpdateMeeting,
   onRangeChange,
+  onAddMeeting,
   isLoading = false,
+  filterContext,
 }: GovCalendarFullViewProps) {
   const { users } = useUserStore();
   const [selectedEvent, setSelectedEvent] = React.useState<MappedEvent | null>(null);
@@ -162,6 +265,7 @@ export function GovCalendarFullView({
   const [editEnd, setEditEnd] = React.useState("");
   const [editParticipantIds, setEditParticipantIds] = React.useState<(string | number)[]>([]);
   const [searchParticipant, setSearchParticipant] = React.useState("");
+  const searchParticipantRef = React.useRef<HTMLInputElement>(null);
   const [editContent, setEditContent] = React.useState("");
   const [editLocation, setEditLocation] = React.useState("");
 
@@ -184,31 +288,38 @@ export function GovCalendarFullView({
 
   const events: MappedEvent[] = React.useMemo(() => {
     return meetings
-      .filter((m) => m.scheduledAt)
+      .filter((m) => m.scheduledAt || (m as any).startTime || (m as any).start_time)
       .map((m) => {
-        const cleanDate = m.scheduledAt?.replace(" ", "T") || "";
-        const start = new Date(cleanDate);
+        const startRaw = m.scheduledAt || (m as any).startTime || (m as any).start_time;
+        const startClean = String(startRaw).replace(" ", "T");
+        const start = new Date(startClean);
         let end = new Date(start);
 
-        // Cố gắng parse end_time nếu có (Dựa theo dữ liệu từ Backend)
-        if ((m as any).end_time) {
-          const endClean = (m as any).end_time.replace(" ", "T");
-          end = new Date(endClean);
+        const endRaw = (m as any).endTime || (m as any).end_time;
+        if (endRaw) {
+          end = new Date(String(endRaw).replace(" ", "T"));
         } else {
-          // Mặc định 1 cuộc họp là 1 tiếng
           end.setHours(end.getHours() + 1);
         }
 
-        const isConflict = Boolean((m as any).hasConflict);
         const title = m.title || m.content || "Lịch công tác";
+        const hasConflict = Boolean(
+          (m as any).hasConflict ||
+          (m as any).has_conflict ||
+          ((m as any).conflicts && (m as any).conflicts.length > 0)
+        );
 
         return {
           id: m.id,
-          title: `[${m.provinceName}] ${title}`,
+          title: m.provinceName ? `[${m.provinceName}] ${title}` : title,
           start,
           end,
-          resource: m,
-          isConflict,
+          resource: {
+            ...m,
+            hasConflict,
+            conflictingWith: (m as any).conflictingWith || (m as any).conflicting_with || "",
+          },
+          isConflict: hasConflict,
         };
       });
   }, [meetings]);
@@ -226,12 +337,17 @@ export function GovCalendarFullView({
 
   const handleSaveEdit = async () => {
     if (!selectedEvent || !onUpdateMeeting) return;
+    if (!editContent.trim()) {
+      return;
+    }
+    const cleanStart = editStart.includes("T") ? editStart.replace("T", " ") : editStart;
+    const cleanEnd = editEnd ? (editEnd.includes("T") ? editEnd.replace("T", " ") : editEnd) : undefined;
     const updates = {
-      title: editContent,
-      content: editContent,
-      location: editLocation,
-      start_time: editStart.replace("T", " ") + ":00",
-      end_time: editEnd ? editEnd.replace("T", " ") + ":00" : undefined,
+      title: editContent.trim(),
+      content: editContent.trim(),
+      location: editLocation.trim(),
+      start_time: cleanStart + (cleanStart.length === 16 ? ":00" : ""),
+      end_time: cleanEnd ? cleanEnd + (cleanEnd.length === 16 ? ":00" : "") : undefined,
       participant_ids: editParticipantIds,
     };
     const success = await onUpdateMeeting(selectedEvent.id, updates, selectedEvent.resource.projectId);
@@ -258,19 +374,25 @@ export function GovCalendarFullView({
   };
 
   const eventPropGetter = (event: MappedEvent) => {
-    const isDone = event.resource.status === "DONE";
+    const isDone = (event.resource.status as string) === "DONE" || (event.resource.status as string) === "COMPLETED";
     const isCancelled = event.resource.status === "CANCELLED";
+    const isInProgress = (event.resource.status as string) === "IN_PROGRESS";
 
-    let backgroundColor = "#3b82f6"; // primary blue
+    let backgroundColor = "#3b82f6"; 
     let borderColor = "transparent";
 
-    if (event.isConflict) {
-      backgroundColor = "#f43f5e"; // rose-500
-      borderColor = "#be123c"; // rose-700
+    const isConflict = Boolean(event.isConflict || (event.resource as any)?.hasConflict);
+
+    if (isConflict) {
+      backgroundColor = "#f43f5e"; 
+      borderColor = "#be123c"; 
+    } else if (isInProgress) {
+      backgroundColor = "#f59e0b"; 
+      borderColor = "#d97706";
     } else if (isDone) {
-      backgroundColor = "#10b981"; // emerald-500
+      backgroundColor = "#10b981"; 
     } else if (isCancelled) {
-      backgroundColor = "#64748b"; // slate-500
+      backgroundColor = "#64748b"; 
     }
 
     return {
@@ -291,11 +413,46 @@ export function GovCalendarFullView({
   };
 
   return (
-    <div className="bg-card rounded-2xl border border-border/80 shadow-2xs p-4 overflow-hidden relative">
+    <CalendarFilterContext.Provider value={filterContext || null}>
+      <CalendarActionContext.Provider value={{ onAddMeeting }}>
+        <div className="bg-card rounded-2xl border border-border/80 shadow-2xs p-3 sm:p-4 overflow-hidden relative">
       <style>{`
         .rbc-calendar {
-          min-height: 700px;
+          min-height: 920px;
+          height: auto !important;
           font-family: inherit;
+        }
+        .rbc-month-view {
+          min-height: 860px;
+          height: auto;
+        }
+        .rbc-month-row {
+          min-height: 135px;
+          height: auto;
+        }
+        @media (max-width: 768px) {
+          .rbc-month-view,
+          .rbc-time-view {
+            min-width: 680px;
+          }
+          .rbc-calendar {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          .rbc-month-row {
+            min-height: 120px;
+          }
+          .rbc-toolbar-sticky {
+            position: sticky;
+            left: 0;
+            width: 100%;
+            z-index: 10;
+          }
+        }
+        .rbc-date-cell {
+          padding: 2px 4px;
+          font-weight: 600;
+          font-size: 12px;
         }
         .rbc-toolbar button {
           border-radius: 8px;
@@ -310,6 +467,36 @@ export function GovCalendarFullView({
         }
         .rbc-event {
           padding: 2px 6px;
+          font-size: 11px;
+          margin-bottom: 2px;
+          border-radius: 6px;
+        }
+        .rbc-show-more {
+          font-size: 11px;
+          font-weight: 700;
+          color: hsl(var(--primary));
+          padding: 2px 4px;
+          border-radius: 4px;
+          cursor: pointer;
+        }
+        .rbc-show-more:hover {
+          text-decoration: underline;
+        }
+        .rbc-overlay {
+          background-color: hsl(var(--card));
+          border: 1px solid hsl(var(--border));
+          border-radius: 12px;
+          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+          padding: 8px;
+          z-index: 50;
+        }
+        .rbc-overlay-header {
+          font-weight: 700;
+          font-size: 12px;
+          color: hsl(var(--foreground));
+          border-bottom: 1px solid hsl(var(--border));
+          padding: 4px 6px 6px;
+          margin-bottom: 6px;
         }
         .rbc-today {
           background-color: rgba(59, 130, 246, 0.05); /* light primary */
@@ -337,7 +524,7 @@ export function GovCalendarFullView({
         events={events}
         startAccessor="start"
         endAccessor="end"
-        style={{ height: 700 }}
+        style={{ minHeight: 920, height: "auto" }}
         onSelectEvent={handleSelectEvent}
         eventPropGetter={eventPropGetter}
         views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
@@ -363,12 +550,42 @@ export function GovCalendarFullView({
         }}
         components={{
           toolbar: CustomToolbar,
+          month: {
+            dateHeader: CustomMonthDateHeader,
+          },
+        }}
+        onSelectSlot={({ start }) => {
+          onAddMeeting?.(start as Date);
         }}
         popup
         selectable
       />
 
-      {/* Loading Overlay khi lật tháng/tuần */}
+      <div className="mt-4 pt-3 border-t border-border/70 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-1.5 font-medium text-foreground">
+          <Info className="h-4 w-4 text-primary shrink-0" />
+          <span>Chú thích màu sắc:</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-3.5 rounded-[4px] bg-[#f43f5e] border border-[#be123c] shadow-2xs shrink-0" />
+            <span className="font-semibold text-rose-600 dark:text-rose-400">Trùng lịch</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-3.5 rounded-[4px] bg-[#3b82f6] shadow-2xs shrink-0" />
+            <span className="text-foreground font-medium">Kế hoạch / Sắp diễn ra</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-3.5 rounded-[4px] bg-[#10b981] shadow-2xs shrink-0" />
+            <span className="text-foreground font-medium">Đã hoàn thành</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-3.5 rounded-[4px] bg-[#64748b] shadow-2xs opacity-75 shrink-0" />
+            <span className="text-muted-foreground font-medium">Đã hủy</span>
+          </div>
+        </div>
+      </div>
+
       {isLoading && (
         <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px] flex items-center justify-center z-20 rounded-2xl">
           <div className="flex items-center gap-2 bg-card/95 border border-border/80 shadow-md px-3.5 py-2 rounded-xl text-xs font-semibold text-foreground">
@@ -378,17 +595,38 @@ export function GovCalendarFullView({
         </div>
       )}
 
-      {/* Modal Chi tiết Lịch Hẹn */}
       {selectedEvent && (
         <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
           <DialogContent className="sm:max-w-md p-0 overflow-hidden">
             <div className={cn(
-              "h-14 flex items-center px-6 border-b",
-              selectedEvent.isConflict ? "bg-rose-500/10 border-rose-500/20" : "bg-muted/40"
+              "h-14 flex items-center pl-6 pr-14 border-b",
+              (selectedEvent.isConflict || (selectedEvent.resource as any)?.hasConflict) ? "bg-rose-500/10 border-rose-500/20" : "bg-muted/40"
             )}>
-              <DialogTitle className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5 text-primary" />
-                <span>Chi tiết lịch trình công việc</span>
+              <DialogTitle className="flex items-center gap-2 flex-wrap">
+                <CalendarIcon className={cn("h-5 w-5 shrink-0", (selectedEvent.isConflict || (selectedEvent.resource as any)?.hasConflict) ? "text-rose-600" : "text-primary")} />
+                <span className={cn("text-base font-bold", (selectedEvent.isConflict || (selectedEvent.resource as any)?.hasConflict) ? "text-rose-700" : "text-foreground")}>
+                  Chi tiết lịch trình công việc
+                </span>
+                {(selectedEvent.isConflict || (selectedEvent.resource as any)?.hasConflict) && (
+                  <Badge variant="destructive" className="bg-rose-600 hover:bg-rose-600 text-white font-bold text-[10px] animate-pulse px-2 py-0.5 ml-1">
+                    ⚠️ Trùng lịch
+                  </Badge>
+                )}
+                {selectedEvent.resource.status === "IN_PROGRESS" && (
+                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-bold text-[10px] animate-pulse px-2 py-0.5 ml-1">
+                    ⚡ Đang diễn ra
+                  </Badge>
+                )}
+                {((selectedEvent.resource.status as string) === "DONE" || (selectedEvent.resource.status as string) === "COMPLETED") && (
+                  <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 ml-1">
+                    ✓ Đã xong
+                  </Badge>
+                )}
+                {selectedEvent.resource.status === "CANCELLED" && (
+                  <Badge className="bg-slate-500 hover:bg-slate-500 text-white font-bold text-[10px] px-2 py-0.5 ml-1">
+                    Đã hủy
+                  </Badge>
+                )}
               </DialogTitle>
             </div>
 
@@ -488,9 +726,20 @@ export function GovCalendarFullView({
                           <span className="text-muted-foreground">Chọn người chủ trì...</span>
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-[250px]" align="start">
+                      <DropdownMenuContent
+                        className="w-[250px]"
+                        align="start"
+                        onOpenAutoFocus={(e) => {
+                          e.preventDefault();
+                          searchParticipantRef.current?.focus();
+                          setTimeout(() => {
+                            searchParticipantRef.current?.focus();
+                          }, 10);
+                        }}
+                      >
                         <div className="p-1">
                           <Input
+                            ref={searchParticipantRef}
                             placeholder="Tìm kiếm..."
                             value={searchParticipant}
                             onChange={(e) => setSearchParticipant(e.target.value)}
@@ -567,34 +816,92 @@ export function GovCalendarFullView({
                 )}
               </div>
 
-              {selectedEvent.isConflict && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-700 text-xs mt-4">
-                  <span className="font-bold">⚠️ Cảnh báo:</span> Lãnh đạo đã bị trùng lịch công tác tại thời điểm này.
-                  {selectedEvent.resource.conflictingWith && (
-                    <div className="mt-1.5 font-semibold text-rose-800">
-                      Chi tiết: {selectedEvent.resource.conflictingWith}
+              {(selectedEvent.isConflict || (selectedEvent.resource as any)?.hasConflict) && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-700 text-xs mt-4 space-y-2.5">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-700 text-sm">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                    <span>Cảnh báo: Trùng lịch công tác</span>
+                  </div>
+                  <p className="text-rose-600 leading-relaxed text-[11px]">
+                    Lãnh đạo phụ trách đang có cuộc họp khác bị trùng khung giờ này:
+                  </p>
+
+                  {((selectedEvent.resource as any)?.conflicts && Array.isArray((selectedEvent.resource as any).conflicts) && (selectedEvent.resource as any).conflicts.length > 0) ? (
+                    <div className="space-y-1.5 mt-1">
+                      {((selectedEvent.resource as any).conflicts as any[]).map((c: any, i: number) => {
+                        const leaderNames = c.users?.map((u: any) => u.name).filter(Boolean).join(", ");
+                        return (
+                          <div key={i} className="bg-rose-500/15 border border-rose-500/25 p-2.5 rounded-lg text-xs space-y-1">
+                            <div className="flex items-center gap-1.5 text-rose-900">
+                              <span className="font-semibold text-rose-700">👤 Nhân sự trùng:</span>
+                              <strong className="font-bold text-rose-950">{leaderNames || "Lãnh đạo phụ trách"}</strong>
+                            </div>
+                            <div className="text-rose-800 text-[11px] pl-3 flex items-start gap-1">
+                              <span className="text-rose-500 mt-0.5">•</span>
+                              <span>Có lịch họp: <strong className="font-semibold text-rose-950">"{c.label}"</strong></span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
+                  ) : selectedEvent.resource.conflictingWith ? (
+                    <div className="bg-rose-500/15 border border-rose-500/25 p-2.5 rounded-lg text-xs text-rose-900 font-medium leading-relaxed">
+                      {selectedEvent.resource.conflictingWith}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
 
             <DialogFooter className="px-6 py-4 bg-muted/30 border-t flex flex-wrap items-center justify-between gap-3 sm:justify-between">
               <div className="flex flex-wrap gap-2">
-                {selectedEvent.resource.status === "UPCOMING" && (
+                {selectedEvent.resource.status !== "DONE" && selectedEvent.resource.status !== "CANCELLED" && (
+                  (selectedEvent.start && new Date() >= selectedEvent.start) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        onUpdateStatus(selectedEvent.id, "DONE");
+                        setIsDetailOpen(false);
+                      }}
+                      className="text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer"
+                    >
+                      <Check className="h-4 w-4 mr-1" /> Đã xong
+                    </Button>
+                  ) : null
+                )}
+
+                {selectedEvent.resource.status !== "CANCELLED" && selectedEvent.resource.status !== "DONE" && (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      onUpdateStatus(selectedEvent.id, "DONE");
-                      setIsDetailOpen(false);
+                      if (confirm("Bạn có chắc chắn muốn hủy lịch hẹn này không?")) {
+                        onUpdateStatus(selectedEvent.id, "CANCELLED");
+                        setIsDetailOpen(false);
+                      }
                     }}
-                    className="text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
+                    className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer"
                   >
-                    <Check className="h-4 w-4 mr-1" /> Đã xong
+                    <X className="h-4 w-4 mr-1" /> Hủy lịch
                   </Button>
                 )}
-                {onUpdateMeeting && selectedEvent.resource.status === "UPCOMING" && selectedEvent.end && new Date() <= selectedEvent.end && (
+
+                {selectedEvent.resource.status === "DONE" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      onUpdateStatus(selectedEvent.id, "UPCOMING");
+                      setIsDetailOpen(false);
+                    }}
+                    className="text-blue-600 border-blue-500/30 hover:bg-blue-500/10 cursor-pointer"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" /> Đặt lại sắp tới
+                  </Button>
+                )}
+
+                {onUpdateMeeting && selectedEvent.resource.status !== "CANCELLED" && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -605,9 +912,26 @@ export function GovCalendarFullView({
                         setIsEditing(true);
                       }
                     }}
-                    className={isEditing ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}
+                    className={isEditing ? "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer" : "cursor-pointer"}
                   >
                     {isEditing ? "Lưu thông tin" : "Chỉnh sửa"}
+                  </Button>
+                )}
+
+                {onDeleteMeeting && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (confirm("Bạn có chắc chắn muốn xóa lịch hẹn này không?")) {
+                        onDeleteMeeting(selectedEvent.id);
+                        setIsDetailOpen(false);
+                      }
+                    }}
+                    className="text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                    title="Xóa lịch hẹn"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" /> Xóa
                   </Button>
                 )}
               </div>
@@ -623,5 +947,7 @@ export function GovCalendarFullView({
         </Dialog>
       )}
     </div>
+      </CalendarActionContext.Provider>
+  </CalendarFilterContext.Provider>
   );
 }

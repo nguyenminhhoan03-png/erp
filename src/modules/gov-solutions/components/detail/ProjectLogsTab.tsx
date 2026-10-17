@@ -101,7 +101,6 @@ export function ProjectLogsTab({ logs, onOpenLogDialog, onEditLog }: ProjectLogs
               key={log.id}
               className="p-4 rounded-xl border border-border/80 bg-card space-y-3 relative hover:border-primary/40 transition-all shadow-2xs group"
             >
-              {/* Header row: Loại sự vụ, Khâu, Thời gian, Phụ trách & Nút Action */}
               <div className="flex items-start justify-between gap-3 text-xs">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {log.logType && GOV_LOG_TYPES[log.logType] && (
@@ -124,14 +123,13 @@ export function ProjectLogsTab({ logs, onOpenLogDialog, onEditLog }: ProjectLogs
                   <span className="text-[11px] text-muted-foreground">
                     •{" "}
                     {log.meetingType === "TRUC_TIEP"
-                      ? "🏢 Trực tiếp"
+                      ? "Trực tiếp"
                       : log.meetingType === "ONLINE"
-                      ? "💻 Online"
-                      : "📞 Điện thoại"}
+                      ? "Online"
+                      : "Điện thoại"}
                   </span>
                 </div>
 
-                {/* Right: PIC & Menu Action */}
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-[11px] text-muted-foreground hidden sm:inline">
                     Phụ trách: <strong className="text-foreground">{log.recordedBy || "IGB"}</strong>
@@ -171,14 +169,12 @@ export function ProjectLogsTab({ logs, onOpenLogDialog, onEditLog }: ProjectLogs
                 </div>
               </div>
 
-              {/* Tiêu đề sự vụ */}
               {log.title && (
                 <h5 className="text-sm font-bold text-foreground">
                   {log.title}
                 </h5>
               )}
 
-              {/* Metadata: Đại diện Tỉnh/Sở & Địa điểm */}
               <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
                 {log.participants && (
                   <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
@@ -198,12 +194,10 @@ export function ProjectLogsTab({ logs, onOpenLogDialog, onEditLog }: ProjectLogs
                 )}
               </div>
 
-              {/* Nội dung chi tiết */}
               <p className="text-foreground text-xs leading-relaxed whitespace-pre-wrap">
                 {log.content}
               </p>
 
-              {/* Kết quả / Thỏa thuận đạt được */}
               {log.agreements && (
                 <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
@@ -216,7 +210,6 @@ export function ProjectLogsTab({ logs, onOpenLogDialog, onEditLog }: ProjectLogs
                 </div>
               )}
 
-              {/* Box Các bước tiếp theo (Next Steps) */}
               {log.nextSteps && (
                 <div className="p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-950 dark:text-indigo-200 text-xs flex items-start gap-2">
                   <ArrowRightCircle className="h-4 w-4 shrink-0 text-indigo-600 mt-0.5" />
@@ -229,7 +222,6 @@ export function ProjectLogsTab({ logs, onOpenLogDialog, onEditLog }: ProjectLogs
                 </div>
               )}
 
-              {/* Tệp đính kèm / Biên bản họp */}
               {log.attachments && log.attachments.length > 0 && (
                 <div className="pt-1.5 border-t border-border/50 space-y-1.5">
                   <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">

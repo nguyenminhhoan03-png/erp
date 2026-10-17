@@ -28,14 +28,12 @@ export default function ProjectsPage() {
     fetchInitial();
   }, [fetchInitial]);
 
-  // Summary counts
   const totalGovProvinces = projects.length || 34;
   const completedGovProjects = projects.filter((p) => p.stage === "COMPLETED").length;
   const deployingGovProjects = projects.filter((p) => p.stage === "DEPLOYING").length;
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border/60">
         <div>
           <div className="flex items-center gap-2">
@@ -63,9 +61,7 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* KPI Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Card 1: B2G Digital Transformation */}
         <div className="relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/5 via-card to-card p-5 shadow-xs transition-all hover:shadow-md hover:border-blue-500/40">
           <div className="flex items-start justify-between">
             <div>
@@ -109,7 +105,6 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {/* Card 2: Outsource Enterprise */}
         <div className="relative overflow-hidden rounded-xl border border-purple-500/20 bg-gradient-to-br from-purple-500/5 via-card to-card p-5 shadow-xs transition-all hover:shadow-md hover:border-purple-500/40">
           <div className="flex items-start justify-between">
             <div>
@@ -148,7 +143,6 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {/* Card 3: Internal R&D */}
         <div className="relative overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-card to-card p-5 shadow-xs transition-all hover:shadow-md hover:border-emerald-500/40">
           <div className="flex items-start justify-between">
             <div>
@@ -188,7 +182,6 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Solutions Quick Jump Showcase */}
       <div className="rounded-xl border border-border/60 bg-card p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div>

@@ -26,7 +26,7 @@ interface TaskListViewProps {
 
 export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
   const { getUserById, departments } = useUserStore();
-  const { projects } = useTaskStore();
+  const { projects, statuses } = useTaskStore();
 
   return (
     <div className="rounded-2xl border border-border/80 bg-card overflow-hidden shadow-2xs">
@@ -47,14 +47,20 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
           </thead>
           <tbody className="divide-y divide-border/60">
             {tasks.map((task) => {
+              const statusDef = statuses?.find((s) => s.key === task.status);
               const statusCfg = TASK_STATUS_CONFIG[task.status];
+              const statusLabel = statusDef?.name || statusCfg?.label || task.status;
+              const statusDotColor = statusDef?.color ? undefined : (statusCfg?.dotColor || "bg-slate-400");
               const priorityCfg = TASK_PRIORITY_CONFIG[task.priority];
-              const dept = departments.find((d) => d.id === task.departmentId);
+              const dept = departments.find((d) => String(d.id) === String(task.departmentId));
+              const departmentName = task.departmentName || dept?.name || dept?.code;
               const project = projects.find((p) => p.id === task.projectId);
-              const overdue = isOverdue(task.dueDate, task.status);
-              const assignees = task.assigneeIds
-                .map((id) => getUserById(id))
-                .filter(Boolean);
+              const overdue = isOverdue(task.dueDate, task.status, task.closedAt);
+              const assignees = (Array.isArray(task.assignees) && task.assignees.length > 0)
+                ? task.assignees
+                : (Array.isArray(task.assigneeIds) ? task.assigneeIds : [])
+                    .map((id) => getUserById(id))
+                    .filter(Boolean);
 
               return (
                 <tr
@@ -62,12 +68,10 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                   onClick={() => onTaskClick(task)}
                   className="hover:bg-muted/40 transition-colors cursor-pointer group"
                 >
-                  {/* Mã Task */}
                   <td className="py-3 px-4 font-mono font-semibold text-xs text-muted-foreground group-hover:text-primary transition-colors">
                     {task.code}
                   </td>
 
-                  {/* Dự án */}
                   <td className="py-3 px-4">
                     {project ? (
                       <Badge
@@ -82,7 +86,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     )}
                   </td>
 
-                  {/* Tiêu đề & tags */}
                   <td className="py-3 px-4">
                     <div className="flex flex-col gap-1">
                       <span className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
@@ -103,31 +106,35 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     </div>
                   </td>
 
-                  {/* Phòng ban */}
                   <td className="py-3 px-4">
-                    {dept && (
+                    {departmentName ? (
                       <Badge
                         variant="outline"
-                        className="text-[11px] font-medium"
+                        className="text-[11px] font-medium max-w-[160px] truncate"
                         style={{
-                          borderColor: `${dept.color}40`,
-                          color: dept.color,
-                          backgroundColor: `${dept.color}10`,
+                          borderColor: dept?.color ? `${dept.color}40` : undefined,
+                          color: dept?.color || undefined,
+                          backgroundColor: dept?.color ? `${dept.color}10` : undefined,
                         }}
+                        title={departmentName}
                       >
-                        {dept.code}
+                        {departmentName}
                       </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs font-mono">-</span>
                     )}
                   </td>
 
-                  {/* Trạng thái & Resolution */}
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={cn("w-2 h-2 rounded-full shrink-0", statusCfg.dotColor)} />
+                      <span
+                        className={cn("w-2 h-2 rounded-full shrink-0", !statusDef?.color && statusDotColor)}
+                        style={{ backgroundColor: statusDef?.color || undefined }}
+                      />
                       <span className="text-xs font-medium text-foreground">
-                        {statusCfg.label}
+                        {statusLabel}
                       </span>
-                      {task.status === "CANCELLED" && task.resolution && TASK_RESOLUTION_CONFIG[task.resolution] && (
+                      {task.resolution && task.resolution !== "DONE" && TASK_RESOLUTION_CONFIG[task.resolution] && (
                         <Badge
                           variant="outline"
                           className={cn(
@@ -143,7 +150,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     </div>
                   </td>
 
-                  {/* Độ ưu tiên */}
                   <td className="py-3 px-4">
                     <Badge
                       variant="outline"
@@ -153,7 +159,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     </Badge>
                   </td>
 
-                  {/* Người thực hiện */}
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1.5">
                       {assignees.length === 0 ? (
@@ -173,7 +178,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     </div>
                   </td>
 
-                  {/* Deadline */}
                   <td className="py-3 px-4">
                     <div
                       className={cn(
@@ -192,7 +196,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     </div>
                   </td>
 
-                  {/* Action */}
                   <td className="py-3 px-4 text-center">
                     <Button
                       variant="ghost"

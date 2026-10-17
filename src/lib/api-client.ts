@@ -1,14 +1,5 @@
-import { clearToken, getToken } from "./auth-token";
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== "undefined" && window.location.hostname) {
-    return `http://${window.location.hostname}:8000/api`;
-  }
-  return "http://127.0.0.1:8000/api";
-}
+import { apiRequest as baseApiRequest } from "./api/client";
+import type { HttpMethod } from "./api/types";
 
 export class ApiError extends Error {
   status: number;
@@ -23,46 +14,29 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  method?: HttpMethod;
   body?: unknown;
   auth?: boolean;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, auth = true } = options;
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const res = await baseApiRequest<T>(path, {
+    method,
+    body,
+    auth,
+  });
 
-  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
-  if (body !== undefined && !isFormData) headers["Content-Type"] = "application/json";
-
-  const token = getToken();
-  if (auth && token) headers.Authorization = `Bearer ${token}`;
-
-  let response: Response;
-  const baseUrl = getBaseUrl();
-  try {
-    response = await fetch(`${baseUrl}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? (isFormData ? (body as BodyInit) : JSON.stringify(body)) : undefined,
-    });
-  } catch {
-    throw new ApiError("Không thể kết nối tới máy chủ. Vui lòng thử lại sau", 0);
-  }
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    if (response.status === 401 && auth) {
-      clearToken();
-      if (typeof window !== "undefined") window.location.replace("/login");
-    }
+  if (!res.ok) {
+    const errorPayload = res.data as { message?: string; errors?: Record<string, string[]> } | null;
     throw new ApiError(
-      payload?.message ?? "Đã có lỗi xảy ra",
-      response.status,
-      payload?.errors ?? {}
+      errorPayload?.message ?? res.statusText ?? "Đã có lỗi xảy ra",
+      res.status,
+      errorPayload?.errors ?? {}
     );
   }
 
-  return payload as T;
+  return res.data as T;
 }
+
+export { apiClient } from "./api/client";

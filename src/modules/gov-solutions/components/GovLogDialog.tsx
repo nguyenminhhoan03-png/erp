@@ -6,8 +6,6 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/shared/components/ui/dropdown-menu";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import { useGovStore } from "../store/govStore";
 import { GovLogType, DltmWorkLog, GovWorkLog } from "../types";
 import { GOV_LOG_TYPES, STAGE_OPTIONS } from "../constants";
@@ -15,7 +13,6 @@ import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
 import {
   BookOpen,
-  CalendarPlus,
   Send,
   Inbox,
   PhoneCall,
@@ -32,7 +29,6 @@ import {
   FileText,
   MapPin,
   Pencil,
-  Sparkles,
 } from "lucide-react";
 
 export interface GovLogDialogProps {
@@ -63,13 +59,6 @@ const formatFileSize = (bytes?: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const getDefaultNextMeetingDate = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 3);
-  d.setHours(9, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
 
 export function GovLogDialog({
   open,
@@ -100,22 +89,12 @@ export function GovLogDialog({
   const [agreements, setAgreements] = React.useState("");
   const [nextSteps, setNextSteps] = React.useState("");
 
-  // Attachments
   const [attachments, setAttachments] = React.useState<
     Array<{ name: string; url: string; size?: number; type?: string }>
   >([]);
   const [isUploadingFile, setIsUploadingFile] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Next meeting follow-up
-  const [isCreateNextMeeting, setIsCreateNextMeeting] = React.useState(false);
-  const [nextMeetingDate, setNextMeetingDate] = React.useState(getDefaultNextMeetingDate());
-  const [nextMeetingTitle, setNextMeetingTitle] = React.useState("");
-  const [nextMeetingType, setNextMeetingType] = React.useState<DltmWorkLog["meetingType"]>("TRUC_TIEP");
-  const [nextMeetingLocation, setNextMeetingLocation] = React.useState("");
-  const [participantIds, setParticipantIds] = React.useState<string[]>([]);
-  const [searchParticipant, setSearchParticipant] = React.useState("");
-  const [durationMinutes, setDurationMinutes] = React.useState<number>(60);
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -136,7 +115,6 @@ export function GovLogDialog({
         setAgreements(editingLog.agreements || "");
         setNextSteps(editingLog.nextSteps || "");
         setAttachments(editingLog.attachments || []);
-        setIsCreateNextMeeting(false);
       } else if (currentProject) {
         const stageMap: Record<string, number> = {
           DISPATCHED: 1,
@@ -171,12 +149,6 @@ export function GovLogDialog({
         setAgreements("");
         setNextSteps("");
         setAttachments([]);
-        setIsCreateNextMeeting(false);
-        setNextMeetingDate(getDefaultNextMeetingDate());
-        setNextMeetingTitle(`Buổi làm việc tiếp theo - ${provinceName}`);
-        setNextMeetingType("TRUC_TIEP");
-        setNextMeetingLocation(`Trụ sở UBND / Sở - ${provinceName}`);
-        setParticipantIds([]);
       }
     }
   }, [open, editingLog, currentProject, provinceName, todayStr]);
@@ -297,23 +269,10 @@ export function GovLogDialog({
           nextSteps: nextSteps.trim() || undefined,
           attachments,
           recordedBy: picName.trim() || "IGB Representative",
-          createNextMeeting: isCreateNextMeeting,
-          nextMeetingDate: isCreateNextMeeting ? nextMeetingDate.replace("T", " ") : undefined,
-          nextMeetingTitle: isCreateNextMeeting
-            ? nextMeetingTitle.trim() || `Buổi làm việc tiếp theo - ${provinceName}`
-            : undefined,
-          nextMeetingType: isCreateNextMeeting ? nextMeetingType : undefined,
-          nextMeetingLocation: isCreateNextMeeting ? nextMeetingLocation.trim() || location : undefined,
-          participantIds: isCreateNextMeeting ? participantIds : undefined,
-          durationMinutes: isCreateNextMeeting ? durationMinutes : undefined,
         });
 
         if (ok) {
-          toast.success(
-            isCreateNextMeeting
-              ? `Đã lưu nhật ký và lên lịch hẹn tiếp theo cho ${provinceName}!`
-              : `Đã ghi nhận nhật ký làm việc thành công với ${provinceName}`
-          );
+          toast.success(`Đã ghi nhận nhật ký làm việc thành công với ${provinceName}`);
           onOpenChange(false);
         } else {
           toast.error("Không thể lưu nhật ký, vui lòng thử lại");
@@ -345,7 +304,6 @@ export function GovLogDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3.5 pt-1">
-          {/* Giai đoạn & Loại sự vụ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-foreground">
@@ -393,7 +351,6 @@ export function GovLogDialog({
             </div>
           </div>
 
-          {/* Tiêu đề sự vụ */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground">Tiêu đề sự vụ</label>
             <Input
@@ -404,7 +361,6 @@ export function GovLogDialog({
             />
           </div>
 
-          {/* Thời gian thực hiện & Hình thức */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-foreground">Thời gian thực hiện</label>
@@ -441,7 +397,6 @@ export function GovLogDialog({
             </div>
           </div>
 
-          {/* Đại diện Tỉnh & Nhân sự IGB */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-foreground">Đại diện Tỉnh / Sở</label>
@@ -473,7 +428,6 @@ export function GovLogDialog({
             </div>
           </div>
 
-          {/* Địa điểm / Địa chỉ */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground flex items-center gap-1">
               <MapPin className="h-3 w-3 text-muted-foreground" />
@@ -487,7 +441,6 @@ export function GovLogDialog({
             />
           </div>
 
-          {/* Nội dung chi tiết */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground">
               Nội dung chi tiết buổi làm việc <span className="text-destructive">*</span>
@@ -501,7 +454,6 @@ export function GovLogDialog({
             />
           </div>
 
-          {/* Kết quả & Bước tiếp theo */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-foreground">
@@ -528,7 +480,6 @@ export function GovLogDialog({
             </div>
           </div>
 
-          {/* Ô UPLOAD BẰNG CHỨNG / TỆP ĐÍNH KÈM / ẢNH CUỘC HỌP */}
           <div className="p-3 rounded-xl border border-border/80 bg-muted/20 space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -540,7 +491,6 @@ export function GovLogDialog({
               </span>
             </div>
 
-            {/* Danh sách tệp đã tải lên */}
             {attachments.length > 0 && (
               <div className="space-y-1.5 pt-1">
                 {attachments.map((att, idx) => (
@@ -579,7 +529,6 @@ export function GovLogDialog({
               </div>
             )}
 
-            {/* Input upload */}
             <div>
               <input
                 ref={fileInputRef}
@@ -613,218 +562,6 @@ export function GovLogDialog({
             </div>
           </div>
 
-          {/* CHECKBOX & FORM TẠO LỊCH HẸN TIẾP THEO (MASTER CALENDAR) */}
-          {!isEditing && (
-            <div
-              className={`p-3.5 rounded-xl border transition-all ${
-                isCreateNextMeeting
-                  ? "border-primary/40 bg-primary/5 shadow-xs"
-                  : "border-border/70 bg-card/60"
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Checkbox
-                  id="createNextMeeting"
-                  checked={isCreateNextMeeting}
-                  onCheckedChange={(checked) => setIsCreateNextMeeting(Boolean(checked))}
-                />
-                <label
-                  htmlFor="createNextMeeting"
-                  className="text-xs font-semibold text-foreground flex items-center gap-1.5 cursor-pointer select-none"
-                >
-                  <CalendarPlus className="h-4 w-4 text-primary" />
-                  <span>📅 Tạo lịch hẹn cho buổi làm việc tiếp theo (Đồng bộ lên Master Calendar)</span>
-                </label>
-              </div>
-
-              {isCreateNextMeeting && (
-                <div className="mt-3 pt-3 border-t border-primary/15 space-y-3">
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-primary/10 p-2 rounded-lg text-primary">
-                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                    <span>
-                      Hệ thống sẽ tạo một lịch hẹn tương lai trên <strong>Master Calendar</strong> để lãnh đạo và các thành viên chuẩn bị.
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">
-                        Thời gian hẹn tiếp theo <span className="text-destructive">*</span>
-                      </label>
-                      <Input
-                        type="datetime-local"
-                        value={nextMeetingDate}
-                        onChange={(e) => setNextMeetingDate(e.target.value)}
-                        className="text-xs h-8.5 bg-background"
-                        required={isCreateNextMeeting}
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">Hình thức buổi hẹn</label>
-                      <Select
-                        value={nextMeetingType}
-                        onValueChange={(val) => setNextMeetingType(val as DltmWorkLog["meetingType"])}
-                      >
-                        <SelectTrigger className="text-xs h-8.5 bg-background">
-                          <SelectValue placeholder="Hình thức" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="TRUC_TIEP" className="text-xs">
-                            🏢 Họp trực tiếp tại địa phương
-                          </SelectItem>
-                          <SelectItem value="ONLINE" className="text-xs">
-                            💻 Họp trực tuyến (Google Meet/Zoom)
-                          </SelectItem>
-                          <SelectItem value="DIEN_THOAI" className="text-xs">
-                            📞 Trao đổi qua điện thoại
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">Tiêu đề buổi hẹn tiếp theo</label>
-                      <Input
-                        value={nextMeetingTitle}
-                        onChange={(e) => setNextMeetingTitle(e.target.value)}
-                        placeholder={`VD: Buổi làm việc tiếp theo - ${provinceName}`}
-                        className="text-xs h-8.5 bg-background"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">Địa điểm / Link họp tiếp theo</label>
-                      <Input
-                        value={nextMeetingLocation}
-                        onChange={(e) => setNextMeetingLocation(e.target.value)}
-                        placeholder="VD: Trụ sở UBND Tỉnh hoặc Google Meet..."
-                        className="text-xs h-8.5 bg-background"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Chọn lãnh đạo tham gia */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-muted-foreground">
-                        Lãnh đạo IGB chủ trì / tham gia
-                      </label>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-between h-8.5 text-xs font-normal bg-background"
-                          >
-                            <span className="text-muted-foreground">
-                              {participantIds.length > 0
-                                ? `Đã chọn ${participantIds.length} người`
-                                : "Chọn nhân sự tham gia..."}
-                            </span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-[220px]" align="start">
-                          <div className="p-1">
-                            <Input
-                              placeholder="Tìm nhân sự..."
-                              value={searchParticipant}
-                              onChange={(e) => setSearchParticipant(e.target.value)}
-                              className="text-xs h-7 mb-2 bg-background"
-                            />
-                            <div className="max-h-[140px] overflow-y-auto space-y-1">
-                              {leaders
-                                .filter(
-                                  (l: any) =>
-                                    !searchParticipant ||
-                                    l.name.toLowerCase().includes(searchParticipant.toLowerCase())
-                                )
-                                .map((leader: any) => (
-                                  <label
-                                    key={leader.id}
-                                    className="flex items-center gap-2 cursor-pointer text-xs hover:bg-muted/50 p-1.5 rounded"
-                                  >
-                                    <Checkbox
-                                      checked={participantIds.includes(String(leader.id))}
-                                      onCheckedChange={(checked) => {
-                                        if (checked) {
-                                          setParticipantIds([...participantIds, String(leader.id)]);
-                                        } else {
-                                          setParticipantIds(
-                                            participantIds.filter((id) => id !== String(leader.id))
-                                          );
-                                        }
-                                      }}
-                                    />
-                                    <span className="truncate">
-                                      {leader.name} ({leader.role})
-                                    </span>
-                                  </label>
-                                ))}
-                            </div>
-                          </div>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-
-                      {/* Danh sách người đã chọn */}
-                      {participantIds.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {participantIds.map((id) => {
-                            const l = leaders.find((leader: any) => String(leader.id) === id);
-                            if (!l) return null;
-                            return (
-                              <div
-                                key={id}
-                                className="flex items-center gap-1.5 bg-primary/10 text-primary rounded-full px-2 py-0.5 text-[11px] max-w-full"
-                              >
-                                <span className="truncate max-w-[120px] font-medium">{l.name}</span>
-                                <X
-                                  className="h-3 w-3 cursor-pointer hover:opacity-75 shrink-0"
-                                  onClick={() =>
-                                    setParticipantIds(participantIds.filter((pid) => pid !== id))
-                                  }
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Thời lượng */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-muted-foreground">
-                        Thời lượng dự kiến
-                      </label>
-                      <Select
-                        value={String(durationMinutes)}
-                        onValueChange={(val) => setDurationMinutes(Number(val))}
-                      >
-                        <SelectTrigger className="text-xs h-8.5 bg-background">
-                          <SelectValue placeholder="Thời lượng" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="30" className="text-xs">
-                            30 phút
-                          </SelectItem>
-                          <SelectItem value="60" className="text-xs">
-                            60 phút (1 tiếng)
-                          </SelectItem>
-                          <SelectItem value="90" className="text-xs">
-                            90 phút (1.5 tiếng)
-                          </SelectItem>
-                          <SelectItem value="120" className="text-xs">
-                            120 phút (2 tiếng)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           <DialogFooter className="pt-2">
             <Button

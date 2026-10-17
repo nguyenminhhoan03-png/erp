@@ -27,6 +27,8 @@ interface GovAddProvinceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenInitAll?: () => void;
+  solutionId?: string;
+  onProvinceAdded?: (provinceId: string) => void;
 }
 
 const REGION_BADGES: Record<string, string> = {
@@ -40,9 +42,14 @@ export function GovAddProvinceModal({
   open,
   onOpenChange,
   onOpenInitAll,
+  solutionId: propSolutionId,
+  onProvinceAdded,
 }: GovAddProvinceModalProps) {
-  const { fetchAvailableProvinces, addProvinceToProject, activeSolutionId, getActiveSolution } =
+  const { fetchAvailableProvinces, addProvinceToProject, activeSolutionId, solutions, getActiveSolution } =
     useGovStore();
+
+  const currentSolutionId = propSolutionId || activeSolutionId;
+  const currentSolution = solutions.find((s) => s.id === currentSolutionId) || getActiveSolution();
 
   const [availableList, setAvailableList] = useState<{ id: number; name: string; region: string }[]>(
     []
@@ -53,14 +60,12 @@ export function GovAddProvinceModal({
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const activeSolution = getActiveSolution();
-
   useEffect(() => {
     if (open) {
       setIsLoading(true);
       setSelectedProvinceId("");
       setSearch("");
-      fetchAvailableProvinces()
+      fetchAvailableProvinces(currentSolutionId)
         .then((list) => {
           setAvailableList(list);
           if (list.length > 0) {
@@ -69,7 +74,7 @@ export function GovAddProvinceModal({
         })
         .finally(() => setIsLoading(false));
     }
-  }, [open, activeSolutionId, fetchAvailableProvinces]);
+  }, [open, currentSolutionId, fetchAvailableProvinces]);
 
   const filteredProvinces = availableList.filter((p) => {
     if (!search.trim()) return true;
@@ -90,7 +95,8 @@ export function GovAddProvinceModal({
     try {
       const success = await addProvinceToProject(
         Number(selectedProvinceId),
-        Number(selectedStageId) || 1
+        Number(selectedStageId) || 1,
+        currentSolutionId
       );
 
       if (success) {
@@ -98,6 +104,7 @@ export function GovAddProvinceModal({
           `Đã thêm tỉnh "${selectedProvince?.name || "mới"}" vào dự án thành công!`
         );
         onOpenChange(false);
+        onProvinceAdded?.(selectedProvinceId);
       } else {
         toast.error("Không thể thêm tỉnh vào dự án. Vui lòng thử lại!");
       }
@@ -112,7 +119,6 @@ export function GovAddProvinceModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md sm:max-w-lg p-0 overflow-hidden border-border/70 shadow-2xl">
         <form onSubmit={handleSubmit}>
-          {/* Header */}
           <div className="relative p-6 pb-4 bg-muted/30 border-b border-border/60">
             <div className="flex items-start gap-3.5">
               <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
@@ -124,13 +130,12 @@ export function GovAddProvinceModal({
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
                   Đưa địa phương vào quy trình tiếp cận, đề nghị tài trợ của{" "}
-                  <strong className="text-foreground">{activeSolution.name}</strong>
+                  <strong className="text-foreground">{currentSolution?.name || "dự án"}</strong>
                 </DialogDescription>
               </div>
             </div>
           </div>
 
-          {/* Form Body */}
           <div className="p-6 space-y-4">
             {isLoading ? (
               <div className="py-8 text-center text-xs text-muted-foreground">
@@ -148,7 +153,6 @@ export function GovAddProvinceModal({
               </div>
             ) : (
               <>
-                {/* Search & Pick Province */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -212,7 +216,6 @@ export function GovAddProvinceModal({
                   </div>
                 </div>
 
-                {/* Stage Initial Selection */}
                 <div className="space-y-1.5 pt-1">
                   <label className="text-xs font-semibold text-foreground">
                     Giai đoạn khởi điểm:
@@ -238,7 +241,6 @@ export function GovAddProvinceModal({
               </>
             )}
 
-            {/* Quick Init 34 provinces link */}
             {onOpenInitAll && availableList.length > 0 && (
               <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs">
                 <span className="text-muted-foreground text-[11px]">
@@ -261,7 +263,6 @@ export function GovAddProvinceModal({
             )}
           </div>
 
-          {/* Footer */}
           <DialogFooter className="p-4 bg-muted/20 border-t border-border/60 flex items-center justify-end gap-2">
             <Button
               type="button"

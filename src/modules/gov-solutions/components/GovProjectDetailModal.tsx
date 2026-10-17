@@ -7,8 +7,11 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/components/ui/tabs";
 import { useGovStore } from "../store/govStore";
+import { useUserStore } from "@/shared/store/useUserStore";
 import { DLTM_STAGES } from "../constants";
 import { GovStage, GovProjectTask, GovWorkLog } from "../types";
+import { taskService } from "@/modules/tasks/services/taskService";
+import { Task } from "@/modules/tasks/types";
 import { GovDocumentDialog } from "./GovDocumentDialog";
 import { GovLogDialog } from "./GovLogDialog";
 import { GovMeetingDialog } from "./GovMeetingDialog";
@@ -25,6 +28,7 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTaskStore } from "@/modules/tasks/store/taskStore";
 
 const STAGE_STEPS: GovStage[] = [
   "DISPATCHED",
@@ -56,6 +60,7 @@ export function GovProjectDetailModal() {
     fetchProvinceDocuments,
     addWorkLog,
   } = useGovStore();
+  const { currentUser } = useUserStore();
 
   const [activeTab, setActiveTab] = React.useState("overview");
   const [notes, setNotes] = React.useState("");
@@ -67,23 +72,51 @@ export function GovProjectDetailModal() {
   const [openMeetingDialog, setOpenMeetingDialog] = React.useState(false);
   const [pendingStage, setPendingStage] = React.useState<GovStage | null>(null);
 
+  const [provinceTasks, setProvinceTasks] = React.useState<Task[]>([]);
+  const [isLoadingProvinceTasks, setIsLoadingProvinceTasks] = React.useState(false);
+  const { isCreateOpen } = useTaskStore();
+  const prevCreateOpenRef = React.useRef(isCreateOpen);
+
+  const loadProvinceTasks = React.useCallback(async (govId: string) => {
+    setIsLoadingProvinceTasks(true);
+    try {
+      const res = await taskService.getTasks({
+        projectId: `gov_${govId}`,
+        perPage: 50,
+      });
+      setProvinceTasks(res.tasks || []);
+    } catch (e) {
+      console.warn("Failed to load province tasks:", e);
+      setProvinceTasks([]);
+    } finally {
+      setIsLoadingProvinceTasks(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (prevCreateOpenRef.current && !isCreateOpen && selectedProject) {
+      loadProvinceTasks(selectedProject.id);
+    }
+    prevCreateOpenRef.current = isCreateOpen;
+  }, [isCreateOpen, selectedProject, loadProvinceTasks]);
+
   React.useEffect(() => {
     if (selectedProject) {
       setNotes(selectedProject.notes || "");
       setIsEditingNotes(false);
+      loadProvinceTasks(selectedProject.id);
       if (selectedProject.provinceId) {
         fetchProvinceWorkLogs(selectedProject.id, selectedProject.provinceId);
         fetchProvinceDocuments(selectedProject.id, selectedProject.provinceId);
       }
     }
-  }, [selectedProject, fetchProvinceWorkLogs, fetchProvinceDocuments]);
+  }, [selectedProject, fetchProvinceWorkLogs, fetchProvinceDocuments, loadProvinceTasks]);
 
   if (!selectedProject) return null;
 
   const currentStageConfig = DLTM_STAGES[selectedProject.stage];
   const projectDocs = documents.filter((d) => d.projectId === selectedProject.id);
   const projectLogs = workLogs.filter((l) => l.projectId === selectedProject.id);
-  const projectTasks = tasks.filter((t) => t.projectId === selectedProject.id);
   const projectMeetings = meetings.filter((m) => String(m.projectId) === String(selectedProject.id));
   const currentStepIdx = STAGE_STEPS.indexOf(selectedProject.stage);
 
@@ -93,17 +126,46 @@ export function GovProjectDetailModal() {
     toast.success("Đã cập nhật ghi chú dự án");
   };
 
-  const handleQuickAddTask = (title: string, priority: GovProjectTask["priority"] = "HIGH") => {
-    addTask({
-      projectId: selectedProject.id,
-      title,
-      assignedTo: selectedProject.igbAssignee.name,
-      status: "TODO",
-      priority,
-      dueDate: new Date().toISOString().split("T")[0],
-      category: "DATA_COLLECTION",
-    });
-    toast.success("Đã tạo công việc mới cho tỉnh này");
+  const handleQuickAddTask = async (title: string, priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT" = "MEDIUM") => {
+    if (!selectedProject) return;
+    try {
+      const assigneeIds = selectedProject.igbAssignee?.id && selectedProject.igbAssignee.id !== "unassigned"
+        ? [String(selectedProject.igbAssignee.id)]
+        : [];
+
+      const newTask = await taskService.createTask({
+        title,
+        description: `Công việc triển khai cho ${selectedProject.provinceName}`,
+        projectId: `gov_${selectedProject.id}`,
+        projectKey: selectedProject.code || "GOV",
+        projectName: `Dự án CĐS ${selectedProject.provinceName}`,
+        priority,
+        status: "TODO",
+        dueDate: new Date().toISOString(),
+        assigneeIds,
+        creatorId: currentUser?.id || "1",
+        checklist: [],
+        commentsCount: 0,
+        tags: ["CĐS", selectedProject.provinceName],
+        departmentId: "",
+      });
+
+      setProvinceTasks((prev) => [newTask, ...prev]);
+      toast.success("Đã tạo công việc thành công vào hệ thống!");
+    } catch (e) {
+      console.error("Failed to quick add task:", e);
+      toast.error("Không thể tạo công việc");
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, status: "TODO" | "IN_PROGRESS" | "DONE") => {
+    try {
+      await taskService.updateTask(taskId, { status });
+      setProvinceTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
+    } catch (e) {
+      console.error("Failed to update task status:", e);
+      toast.error("Không thể cập nhật trạng thái");
+    }
   };
 
   const handleConfirmStage = async (targetStage: GovStage, autoLog: boolean) => {
@@ -138,7 +200,6 @@ export function GovProjectDetailModal() {
     <>
       <Dialog open={Boolean(selectedProject)} onOpenChange={(open) => !open && setSelectedProject(null)}>
         <DialogContent className="max-w-4xl h-[88vh] max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
-          {/* Header Thông tin dự án & Stepper */}
           <ProjectDetailHeader
             project={selectedProject}
             currentStageConfig={currentStageConfig}
@@ -147,7 +208,6 @@ export function GovProjectDetailModal() {
             onUpdateAssignee={updateProjectAssignee}
           />
 
-          {/* Nội dung các Tabs */}
           <Tabs
             value={activeTab}
             onValueChange={setActiveTab}
@@ -168,7 +228,7 @@ export function GovProjectDetailModal() {
                   className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-foreground rounded-none px-1 text-xs font-semibold cursor-pointer"
                 >
                   <CheckSquare className="h-3.5 w-3.5 mr-1.5 text-emerald-500" />
-                  <span>Task dự án ({projectTasks.length})</span>
+                  <span>Task dự án ({provinceTasks.length})</span>
                 </TabsTrigger>
 
                 <TabsTrigger
@@ -213,9 +273,11 @@ export function GovProjectDetailModal() {
             >
               <ProjectTasksTab
                 project={selectedProject}
-                tasks={projectTasks}
+                tasks={provinceTasks}
+                isLoading={isLoadingProvinceTasks}
                 onQuickAddTask={handleQuickAddTask}
-                onUpdateTaskStatus={updateTaskStatus}
+                onUpdateTaskStatus={handleUpdateTaskStatus}
+                onTaskDeleted={(taskId) => setProvinceTasks((prev) => prev.filter((t) => t.id !== taskId))}
               />
             </TabsContent>
 
@@ -250,7 +312,6 @@ export function GovProjectDetailModal() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog con chức năng */}
       <GovDocumentDialog
         open={openDocDialog}
         onOpenChange={setOpenDocDialog}

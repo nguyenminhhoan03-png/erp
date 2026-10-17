@@ -127,7 +127,6 @@ export function GovCalendarTableView({
                     isCancelled && "opacity-60 bg-muted/20"
                   )}
                 >
-                  {/* Thời gian */}
                   <td className="py-3 px-4 align-top">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-1.5 font-semibold text-foreground">
@@ -136,7 +135,6 @@ export function GovCalendarTableView({
                       </div>
                       <span className="text-[11px] text-muted-foreground capitalize">{date}</span>
 
-                      {/* Conflict alert tag */}
                       {m.hasConflict && (
                         <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-1.5 py-0.5 w-fit">
                           <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -146,7 +144,6 @@ export function GovCalendarTableView({
                     </div>
                   </td>
 
-                  {/* Địa phương & Mốc giai đoạn */}
                   <td className="py-3 px-4 align-top">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-1.5">
@@ -158,7 +155,7 @@ export function GovCalendarTableView({
                         {m.projectId && onSelectProject && (
                           <button
                             type="button"
-                            onClick={() => onSelectProject(m.projectId)}
+                            onClick={() => m.projectId && onSelectProject(m.projectId)}
                             className="text-muted-foreground hover:text-primary p-0.5 rounded cursor-pointer"
                             title="Mở chi tiết dự án tỉnh này"
                           >
@@ -179,7 +176,6 @@ export function GovCalendarTableView({
                     </div>
                   </td>
 
-                  {/* Nội dung công tác */}
                   <td className="py-3 px-4 align-top">
                     <div className="flex flex-col gap-1">
                       <p className={cn("font-medium text-foreground", isCancelled && "line-through text-muted-foreground")}>
@@ -198,7 +194,6 @@ export function GovCalendarTableView({
                     </div>
                   </td>
 
-                  {/* Hình thức & Địa điểm */}
                   <td className="py-3 px-4 align-top">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-1.5">
@@ -235,7 +230,6 @@ export function GovCalendarTableView({
                     </div>
                   </td>
 
-                  {/* Sếp chủ trì & Đầu mối tỉnh */}
                   <td className="py-3 px-4 align-top">
                     <div className="flex flex-col gap-1 text-[11px]">
                       <div className="flex items-center gap-1.5 font-medium text-foreground">
@@ -251,7 +245,6 @@ export function GovCalendarTableView({
                     </div>
                   </td>
 
-                  {/* Trạng thái */}
                   <td className="py-3 px-4 align-top text-center">
                     {isDone ? (
                       <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold">
@@ -261,17 +254,20 @@ export function GovCalendarTableView({
                       <Badge variant="secondary" className="text-muted-foreground text-[10px] font-medium">
                         Đã hủy
                       </Badge>
+                    ) : m.status === "IN_PROGRESS" ? (
+                      <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-semibold animate-pulse">
+                        Đang diễn ra
+                      </Badge>
                     ) : (
-                      <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-semibold">
+                      <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] font-semibold">
                         Sắp diễn ra
                       </Badge>
                     )}
                   </td>
 
-                  {/* Thao tác */}
                   <td className="py-3 px-4 align-top text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {!isDone && (
+                      {!isDone && !isCancelled && m.scheduledAt && new Date() >= new Date(m.scheduledAt.replace(" ", "T")) && (
                         <Button
                           variant="ghost"
                           size="icon"

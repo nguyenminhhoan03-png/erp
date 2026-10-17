@@ -35,7 +35,6 @@ export function UserAvatar({
     );
   }
 
-  // Lấy 2 ký tự đầu viết tắt tên tiếng Việt
   const initials = user.name
     .split(" ")
     .slice(-2)

@@ -7,7 +7,6 @@ export const taskFormSchema = z.object({
     .max(150, "Tiêu đề không được vượt quá 150 ký tự"),
   description: z
     .string()
-    .min(10, "Mô tả công việc phải có ít nhất 10 ký tự")
     .max(2000, "Mô tả không được vượt quá 2000 ký tự"),
   projectId: z.string(),
   departmentId: z
@@ -16,6 +15,8 @@ export const taskFormSchema = z.object({
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"], {
     message: "Vui lòng chọn mức độ ưu tiên",
   }),
+  reportToId: z.string().optional(),
+  reportToIds: z.array(z.string()).optional(),
   assigneeIds: z
     .array(z.string())
     .min(1, "Vui lòng chỉ định ít nhất một người phụ trách"),
@@ -23,8 +24,9 @@ export const taskFormSchema = z.object({
   dueDate: z
     .string()
     .min(1, "Vui lòng chọn hạn hoàn thành (Deadline)"),
-  estimatedHours: z.number().min(0).max(9999).optional(),
+  estimatedHours: z.any().optional(),
   tags: z.string().optional(),
+  status: z.string().optional(),
   assignScope: z.enum(["INDIVIDUAL", "ALL_DEPARTMENT"]),
   requiresApproval: z.boolean().optional(),
 });

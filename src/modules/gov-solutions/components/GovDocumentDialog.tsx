@@ -7,7 +7,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useGovStore } from "../store/govStore";
-import { DOCUMENT_TYPE_LABELS } from "../constants";
+import { GOV_DOCUMENT_TYPES, OUTSOURCE_DOCUMENT_TYPES, INTERNAL_DOCUMENT_TYPES } from "../constants";
 import { GovDocument } from "../types";
 import { toast } from "sonner";
 import { FileUp, Link2, FileText, X } from "lucide-react";
@@ -18,6 +18,7 @@ export interface GovDocumentDialogProps {
   onOpenChange: (open: boolean) => void;
   projectId: string;
   provinceName: string;
+  category?: "GOV" | "OUTSOURCE" | "INTERNAL" | string;
 }
 export type DltmDocumentDialogProps = GovDocumentDialogProps;
 
@@ -26,17 +27,32 @@ export function GovDocumentDialog({
   onOpenChange,
   projectId,
   provinceName,
+  category = "GOV",
 }: GovDocumentDialogProps) {
   const { addDocument } = useGovStore();
 
+  const docTypeOptions = React.useMemo(() => {
+    if (category === "OUTSOURCE") return OUTSOURCE_DOCUMENT_TYPES;
+    if (category === "INTERNAL") return INTERNAL_DOCUMENT_TYPES;
+    return GOV_DOCUMENT_TYPES;
+  }, [category]);
+
   const [title, setTitle] = React.useState("");
-  const [type, setType] = React.useState<GovDocument["type"]>("CONG_VAN_DI");
+  const [type, setType] = React.useState<GovDocument["type"]>(docTypeOptions[0]?.value || "OTHER");
   const [uploadMode, setUploadMode] = React.useState<"file" | "link">("file");
   const [fileUrlOrLink, setFileUrlOrLink] = React.useState("");
   const [fileName, setFileName] = React.useState("");
   const [note, setNote] = React.useState("");
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      if (!docTypeOptions.some((opt) => opt.value === type)) {
+        setType(docTypeOptions[0]?.value || "OTHER");
+      }
+    }
+  }, [open, docTypeOptions]);
 
   const formatFileSize = (bytes: number) =>
     bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -147,16 +163,15 @@ export function GovDocumentDialog({
                 <SelectValue placeholder="Chọn phân loại" />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, label]) => (
-                  <SelectItem key={k} value={k} className="text-xs">
-                    {label}
+                {docTypeOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Chọn phương thức đính kèm: Tải tệp lên Storage VS Dán Link Google Drive */}
           <div className="space-y-2 pt-1">
             <div className="flex rounded-lg bg-muted p-1 gap-1">
               <button

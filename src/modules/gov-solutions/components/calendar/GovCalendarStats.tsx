@@ -30,8 +30,6 @@ export function GovCalendarStats({
     return `${y}-${m}-${d}`;
   }, [now]);
 
-  // Lấy chỉ số từ Backend Summary (tối ưu, không phụ thuộc vào tải toàn bộ raw records)
-  // Nếu chưa có summary từ API thì fallback tính nhẹ từ danh sách meetings hiện tại
   const upcomingCount = summary?.upcoming ?? React.useMemo(() => {
     const nowTime = now.getTime();
     return meetings.filter((m) => {
@@ -85,7 +83,6 @@ export function GovCalendarStats({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-      {/* 1. Lịch sắp diễn ra & Hôm nay */}
       <div
         onClick={() => onSelectFilterType(activeFilterType === "UPCOMING" ? "ALL" : "UPCOMING")}
         className={cn(
@@ -124,7 +121,6 @@ export function GovCalendarStats({
         </div>
       </div>
 
-      {/* 2. Công tác trực tiếp tại tỉnh */}
       <div
         onClick={() => onSelectFilterType(activeFilterType === "TRUC_TIEP" ? "ALL" : "TRUC_TIEP")}
         className={cn(
@@ -157,7 +153,6 @@ export function GovCalendarStats({
         </p>
       </div>
 
-      {/* 3. Làm việc trực tuyến Online */}
       <div
         onClick={() => onSelectFilterType(activeFilterType === "ONLINE" ? "ALL" : "ONLINE")}
         className={cn(
@@ -190,7 +185,6 @@ export function GovCalendarStats({
         </p>
       </div>
 
-      {/* 4. Cảnh báo trùng lịch của Sếp */}
       <div
         onClick={onToggleFilterConflict}
         className={cn(

@@ -15,7 +15,6 @@ function getInitialUsers(): User[] {
         }
       }
     } catch {
-      // Ignore
     }
   }
   return [];
@@ -26,7 +25,6 @@ function saveUsers(users: User[]): void {
     try {
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
     } catch {
-      // Ignore
     }
   }
 }
@@ -90,7 +88,13 @@ export const useUserStore = create<UserState>((set, get) => ({
       const { apiRequest } = await import("@/lib/api-client");
       const res = await apiRequest<{ success: boolean; data: any[] }>("/erp/users");
       if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
-        set({ users: res.data });
+        set((state) => {
+          const matchedCurrent = state.currentUser ? res.data.find((u) => u.id === state.currentUser.id) : null;
+          return {
+            users: res.data,
+            currentUser: matchedCurrent || state.currentUser || res.data[0],
+          };
+        });
         saveUsers(res.data);
       }
     } catch (err) {

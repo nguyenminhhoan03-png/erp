@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api-client";
+import { apiClient } from "@/lib/api";
 import { clearToken, setToken } from "@/lib/auth-token";
 import { DepartmentId, User } from "@/shared/types";
 import { AuthUser, LoginPayload, RegisterPayload } from "../types";
@@ -13,32 +13,33 @@ interface MessageResponse {
 
 export const authService = {
   async login(payload: LoginPayload): Promise<AuthUser> {
-    const { data } = await apiRequest<LoginResponse>("/erp/auth/login", {
-      method: "POST",
-      body: payload,
-      auth: false,
-    });
-    setToken(data.access_token);
-    return data.user;
+    const result = await apiClient.postJson<LoginResponse>("/erp/auth/login", payload, { auth: false });
+    if (result.type !== "success" || !result.data?.data) {
+      throw new Error(result.type !== "success" ? result.error.message : "Đăng nhập thất bại");
+    }
+    setToken(result.data.data.access_token);
+    return result.data.data.user;
   },
 
   async register(payload: RegisterPayload): Promise<string> {
-    const { message } = await apiRequest<MessageResponse>("/erp/auth/register", {
-      method: "POST",
-      body: payload,
-      auth: false,
-    });
-    return message;
+    const result = await apiClient.postJson<MessageResponse>("/erp/auth/register", payload, { auth: false });
+    if (result.type !== "success" || !result.data?.message) {
+      throw new Error(result.type !== "success" ? result.error.message : "Đăng ký thất bại");
+    }
+    return result.data.message;
   },
 
   async me(): Promise<AuthUser> {
-    const { data } = await apiRequest<{ data: AuthUser }>("/erp/auth/me");
-    return data;
+    const result = await apiClient.get<{ data: AuthUser }>("/erp/auth/me");
+    if (result.type !== "success" || !result.data?.data) {
+      throw new Error(result.type !== "success" ? result.error.message : "Không thể lấy thông tin người dùng");
+    }
+    return result.data.data;
   },
 
   async logout(): Promise<void> {
     try {
-      await apiRequest("/erp/auth/logout", { method: "POST" });
+      await apiClient.postJson("/erp/auth/logout", {});
     } finally {
       clearToken();
     }
@@ -52,9 +53,11 @@ export function toStoreUser(user: AuthUser): User {
     email: user.email,
     avatar: user.avatar,
     role: user.role,
-    // Module task còn dùng 5 phòng ban mock; id phòng ban thật sẽ được thay khi module này nối API
-    departmentId: user.departmentId as DepartmentId,
-    title: user.title,
+    roleName: user.roleName ?? undefined,
+    departmentId: (user.departmentId || "") as DepartmentId,
+    departmentName: user.departmentName ?? undefined,
+    title: user.title || user.roleName || "Thành viên",
     phone: user.phone ?? undefined,
+    isSuperAdmin: user.isSuperAdmin,
   };
 }

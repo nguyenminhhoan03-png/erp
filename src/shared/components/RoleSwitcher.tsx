@@ -56,7 +56,6 @@ export function RoleSwitcher() {
     return dept ? dept.code : deptId.toUpperCase();
   };
 
-  // Nhóm danh sách theo vai trò
   const admins = users.filter((u) => u.role === "ADMIN");
   const managers = users.filter((u) => u.role === "MANAGER");
   const employees = users.filter((u) => u.role === "EMPLOYEE");
@@ -96,7 +95,6 @@ export function RoleSwitcher() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {/* 1. ADMINS */}
         <div className="px-2 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 uppercase tracking-wider">
           <ShieldAlert className="h-3.5 w-3.5" />
           <span>Ban Giám Đốc (Admin)</span>
@@ -125,7 +123,6 @@ export function RoleSwitcher() {
 
         <DropdownMenuSeparator />
 
-        {/* 2. MANAGERS */}
         <div className="px-2 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 uppercase tracking-wider">
           <UserCheck className="h-3.5 w-3.5" />
           <span>Trưởng phòng (Department Leads)</span>
@@ -159,7 +156,6 @@ export function RoleSwitcher() {
 
         <DropdownMenuSeparator />
 
-        {/* 3. EMPLOYEES */}
         <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wider">
           <Users className="h-3.5 w-3.5" />
           <span>Nhân viên (Staff Members)</span>

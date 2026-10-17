@@ -9,16 +9,12 @@ export interface PermissionContext {
   toStatus?: TaskStatus;
 }
 
-/**
- * Kiểm tra xem user có PermissionKey cụ thể không (Fine-grained RBAC)
- */
 export function hasPermission(
   user: User | null | undefined,
   permission: PermissionKey
 ): boolean {
   if (!user) return false;
 
-  // 1. Kiểm tra ngoại lệ cấp quyền trực tiếp theo nhân sự (User direct overrides)
   if (typeof window !== "undefined") {
     try {
       const overridesRaw = localStorage.getItem("erp_user_permission_overrides_v1");
@@ -31,7 +27,6 @@ export function hasPermission(
     } catch {}
   }
 
-  // 2. Kiểm tra quyền của Vai trò trong LocalStorage (Dynamic Role-Permissions)
   if (typeof window !== "undefined") {
     try {
       const customRolePermsRaw = localStorage.getItem("erp_custom_role_permissions_v1");
@@ -44,15 +39,11 @@ export function hasPermission(
     } catch {}
   }
 
-  // 3. Fallback cấu hình mặc định
   const roleConfig = ROLE_PERMISSIONS[user.role];
   if (!roleConfig) return false;
   return roleConfig.permissions.includes(permission);
 }
 
-/**
- * Lấy phạm vi dữ liệu của User (ABAC Scope)
- */
 export function getUserDataScope(user: User | null | undefined): DataScope {
   if (!user) return "OWN";
 
@@ -70,9 +61,6 @@ export function getUserDataScope(user: User | null | undefined): DataScope {
   return ROLE_PERMISSIONS[user.role]?.dataScope || "OWN";
 }
 
-/**
- * Kiểm tra quyền hạn chung của User (Action + Resource hoặc PermissionKey)
- */
 export function can(
   user: User | null | undefined,
   actionOrPermission: Action | PermissionKey,
@@ -81,18 +69,15 @@ export function can(
 ): boolean {
   if (!user) return false;
 
-  // 1. ADMIN luôn có toàn quyền (Super-admin bypass)
   if (user.role === "ADMIN") {
     return true;
   }
 
-  // 2. Nếu truyền vào theo chuẩn Fine-grained PermissionKey (ví dụ: 'tasks:create', 'tasks:approve')
   if (actionOrPermission.includes(":")) {
     const permKey = actionOrPermission as PermissionKey;
     const permitted = hasPermission(user, permKey);
     if (!permitted) return false;
 
-    // Kiểm tra Data Scope
     const scope = getUserDataScope(user);
     if (scope === "GLOBAL") return true;
 
@@ -113,7 +98,7 @@ export function can(
       if (context?.task) {
         return (
           context.task.creatorId === user.id ||
-          context.task.assigneeIds.includes(user.id)
+          (context.task.assigneeIds || []).includes(user.id)
         );
       }
     }
@@ -121,7 +106,6 @@ export function can(
     return true;
   }
 
-  // 3. Xử lý Action + Resource cổ điển (Backward compatibility)
   const action = actionOrPermission as Action;
 
   if (resource === "task") {
@@ -130,7 +114,7 @@ export function can(
         if (context?.task) {
           return (
             context.task.departmentId === user.departmentId ||
-            context.task.assigneeIds.includes(user.id) ||
+            (context.task.assigneeIds || []).includes(user.id) ||
             context.task.creatorId === user.id
           );
         }
@@ -183,121 +167,58 @@ export function can(
     }
   }
 
-  if (resource === "statistics") {
-    return true;
-  }
-
-  if (resource === "approvals") {
-    return user.role === "MANAGER";
-  }
-
   return false;
 }
 
-/**
- * Kiểm tra quy tắc chuyển trạng thái Task (State Transition Matrix)
- */
 export function checkTaskTransitionPermission(
   user: User,
   task: Task,
-  toStatus: TaskStatus
+  toStatus: TaskStatus | string,
+  customStatuses?: { key: string; category?: string }[]
 ): { allowed: boolean; reason?: string } {
   if (task.status === toStatus) {
     return { allowed: true };
   }
 
-  // Admin có toàn quyền
   if (user.role === "ADMIN") {
     return { allowed: true };
   }
 
-  const isAssignee = task.assigneeIds.includes(user.id);
+  const isAssignee = (task.assigneeIds || []).includes(user.id);
   const isCreator = task.creatorId === user.id;
   const isManagerOfDept = user.role === "MANAGER" && user.departmentId === task.departmentId;
 
-  // 1. Task đang ở trạng thái PENDING_APPROVAL
-  if (task.status === "PENDING_APPROVAL") {
-    if (toStatus === "TODO" || toStatus === "CANCELLED") {
-      if (isManagerOfDept) return { allowed: true };
-      return {
-        allowed: false,
-        reason: "Chỉ Trưởng phòng hoặc Admin mới có quyền phê duyệt task tự đề xuất.",
-      };
+  const toStatusCategory =
+    customStatuses?.find((s) => s.key === toStatus)?.category ||
+    (toStatus === "DONE" || toStatus === "CANCELLED" ? "DONE" : toStatus === "TODO" ? "TODO" : "IN_PROGRESS");
+
+  const currentStatusCategory =
+    customStatuses?.find((s) => s.key === task.status)?.category ||
+    (Boolean(task.closedAt) || task.status === "DONE" || task.status === "CANCELLED" ? "DONE" : task.status === "TODO" ? "TODO" : "IN_PROGRESS");
+
+  if (currentStatusCategory === "DONE" && toStatusCategory !== "DONE") {
+    if (isManagerOfDept || isCreator || user.role === "ADMIN") {
+      return { allowed: true };
     }
     return {
       allowed: false,
-      reason: "Task chờ duyệt cần được phê duyệt sang 'To Do' trước khi thực hiện.",
+      reason: "Chỉ Quản lý hoặc người tạo task mới có quyền mở lại task đã kết thúc.",
     };
   }
 
-  // 2. Kéo sang Done (Nghiệm thu)
-  if (toStatus === "DONE") {
-    if (user.role === "EMPLOYEE") {
-      if (isCreator && isAssignee && !task.requiresApproval) {
-        return { allowed: true };
-      }
+  if (toStatusCategory === "DONE") {
+    if (user.role === "EMPLOYEE" && !isCreator && !isAssignee) {
       return {
         allowed: false,
-        reason: "Bạn không thể tự đóng task do cấp trên giao. Vui lòng kéo sang 'In Review' để Trưởng phòng nghiệm thu!",
+        reason: "Bạn không có quyền hoàn thành hoặc đóng công việc này.",
       };
     }
-    if (isManagerOfDept) return { allowed: true };
+    return { allowed: true };
   }
 
-  // 3. Kéo sang In Review
-  if (toStatus === "IN_REVIEW") {
-    if (isAssignee || isManagerOfDept) return { allowed: true };
-    return {
-      allowed: false,
-      reason: "Chỉ người nhận task hoặc quản lý phòng mới có thể gửi yêu cầu review.",
-    };
+  if (isAssignee || isCreator || isManagerOfDept) {
+    return { allowed: true };
   }
-
-  // 4. Trả lại từ In Review về In Progress
-  if (task.status === "IN_REVIEW" && toStatus === "IN_PROGRESS") {
-    if (isManagerOfDept || isAssignee) return { allowed: true };
-  }
-
-  // 5. Chuyển giữa To Do và In Progress
-  if (
-    (task.status === "TODO" && toStatus === "IN_PROGRESS") ||
-    (task.status === "IN_PROGRESS" && toStatus === "TODO")
-  ) {
-    if (isAssignee || isManagerOfDept) return { allowed: true };
-    return {
-      allowed: false,
-      reason: "Chỉ người được giao việc mới có thể bắt đầu hoặc tạm dừng công việc này.",
-    };
-  }
-
-  // 6. Mở lại task đã Done
-  if (task.status === "DONE") {
-    if (isManagerOfDept) return { allowed: true };
-    return {
-      allowed: false,
-      reason: "Chỉ Trưởng phòng mới có quyền mở lại task đã nghiệm thu hoàn thành.",
-    };
-  }
-
-  // 7. Chuyển sang Cancelled / Closed (Đóng task: Won't Fix, Not a Bug, Duplicate...)
-  if (toStatus === "CANCELLED") {
-    if (isManagerOfDept || isCreator || isAssignee) return { allowed: true };
-    return {
-      allowed: false,
-      reason: "Chỉ người tạo, người được giao hoặc Trưởng phòng mới có quyền đóng task này.",
-    };
-  }
-
-  // 8. Mở lại task đã Cancelled / Closed (Reopen Task)
-  if (task.status === "CANCELLED") {
-    if (isManagerOfDept || isCreator) return { allowed: true };
-    return {
-      allowed: false,
-      reason: "Chỉ người tạo hoặc Trưởng phòng mới có quyền mở lại task đã đóng.",
-    };
-  }
-
-  if (isManagerOfDept) return { allowed: true };
 
   return {
     allowed: false,

@@ -88,7 +88,6 @@ export function ProjectStageConfirmDialog({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="sm:max-w-[440px] p-0 overflow-hidden border-border/80 shadow-2xl rounded-2xl gap-0">
-        {/* Header */}
         <div className="p-4 sm:p-5 border-b border-border/70 bg-gradient-to-r from-card via-muted/30 to-card flex items-start gap-3">
           <div
             className={cn(
@@ -116,10 +115,8 @@ export function ProjectStageConfirmDialog({
           </div>
         </div>
 
-        {/* Body */}
         {pendingStage && pendingStageConfig && (
           <div className="p-4 sm:p-5 space-y-3.5 text-xs">
-            {/* Box chuyển bước ngắn gọn */}
             <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 space-y-2.5">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
                 <span>Tiến trình dự án</span>
@@ -152,7 +149,6 @@ export function ProjectStageConfirmDialog({
               </p>
             </div>
 
-            {/* Checkbox tự động ghi nhật ký */}
             <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-border/60 bg-card/60 cursor-pointer hover:bg-muted/40 transition-colors">
               <input
                 type="checkbox"
@@ -167,7 +163,6 @@ export function ProjectStageConfirmDialog({
           </div>
         )}
 
-        {/* Footer */}
         <div className="p-3.5 bg-muted/20 border-t border-border/70 flex items-center justify-end gap-2">
           <Button
             type="button"

@@ -13,6 +13,19 @@ export interface DigitalSolution {
   description: string;
   activeCount: number;
   totalTargetProvinces?: number;
+  managerId?: number | string | null;
+  managerIds?: (number | string)[];
+  managers?: any[];
+  status?: string;
+  priority?: "low" | "medium" | "high" | "urgent";
+  startDate?: string | null;
+  endDate?: string | null;
+  budget?: number | null;
+  category?: "GOV" | "INTERNAL" | "OUTSOURCE" | string;
+  departmentId?: number | string | null;
+  partnerId?: number | string | null;
+  departmentName?: string;
+  partnerName?: string;
 }
 
 export type GovStage =
@@ -30,12 +43,28 @@ export type DltmStage = GovStage;
 
 export type Region = "Bắc Bộ" | "Trung Bộ" | "Nam Bộ" | "Tây Nguyên";
 
+export type DocumentType =
+  | "CONG_VAN_DI"
+  | "CONG_VAN_DEN"
+  | "MOU"
+  | "LOGO_ASSETS"
+  | "DATA_SHEET"
+  | "CONTRACT"
+  | "REQUIREMENT"
+  | "DESIGN_UI"
+  | "TECH_SPEC"
+  | "PRD_PLAN"
+  | "ACCEPTANCE_MINUTES"
+  | "USER_GUIDE"
+  | "MEETING_REPORT"
+  | "OTHER";
+
 export interface GovDocument {
   id: string;
   projectId: string;
   solutionId?: string;
   title: string;
-  type: "CONG_VAN_DI" | "CONG_VAN_DEN" | "MOU" | "LOGO_ASSETS" | "DATA_SHEET" | "OTHER";
+  type: DocumentType;
   fileUrlOrLink: string;
   fileName?: string;
   fileSize?: string;
@@ -74,11 +103,6 @@ export interface GovWorkLog {
   nextSteps?: string;
   recordedBy: string;
   location?: string;
-  isSyncCalendar?: boolean;
-  isMasterCalendar?: boolean;
-  hostUserId?: number;
-  participantIds?: (string | number)[];
-  durationMinutes?: number;
   attachments?: {
     name: string;
     url: string;
@@ -90,15 +114,22 @@ export interface GovWorkLog {
 }
 export type DltmWorkLog = GovWorkLog;
 
+export type MeetingCategory = "GOV_MISSION" | "INTERNAL_MEETING" | "COMPANY_EVENT" | "CLIENT_MEETING";
+
 export interface GovMeetingSchedule {
   id: string;
-  projectId: string;
+  category?: MeetingCategory;
+  eventType?: MeetingCategory;
+  projectId?: string;
   solutionId?: string;
+  department?: string;
+  clientName?: string;
+  provinceId?: number;
   stageId?: number | string | null;
   stageName?: string;
   stageColor?: string;
   stageOrder?: number;
-  provinceName: string;
+  provinceName?: string;
   scheduledAt: string;
   location: string;
   content: string;
@@ -109,9 +140,11 @@ export interface GovMeetingSchedule {
   hostUserId?: number;
   participantIds?: (string | number)[];
   meetingType?: "TRUC_TIEP" | "ONLINE" | "DIEN_THOAI";
-  contactPerson: string;
+  durationMinutes?: number;
+  endTime?: string;
+  contactPerson?: string;
   partnerParticipants?: string;
-  status: "UPCOMING" | "DONE" | "CANCELLED";
+  status: "UPCOMING" | "IN_PROGRESS" | "DONE" | "CANCELLED";
   hasConflict?: boolean;
   conflictingWith?: string;
   conflicts?: {

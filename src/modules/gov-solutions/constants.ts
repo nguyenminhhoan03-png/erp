@@ -1,4 +1,4 @@
-import { DigitalSolution, GovStage, DltmStage, Region, GovLogType } from "./types";
+import { DigitalSolution, GovStage, DltmStage, Region, GovLogType, DocumentType } from "./types";
 
 export interface StageConfig {
   id: GovStage;
@@ -98,14 +98,54 @@ export const DLTM_STAGES = GOV_STAGES;
 
 export const DEFAULT_DIGITAL_SOLUTIONS: DigitalSolution[] = [];
 
-export const DOCUMENT_TYPE_LABELS = {
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  // Gov
   CONG_VAN_DI: "Công văn IGB gửi đi",
   CONG_VAN_DEN: "Công văn trả lời của Tỉnh",
   MOU: "Biên bản ghi nhớ (MOU)",
   LOGO_ASSETS: "Logo & Bộ nhận diện tỉnh",
   DATA_SHEET: "Dữ liệu chuyên ngành (Địa điểm/Địa chính/Y tế)",
+
+  // Outsource & Internal
+  CONTRACT: "Hợp đồng & Phụ lục kinh tế",
+  REQUIREMENT: "Đặc tả yêu cầu phần mềm (SRS / BRD)",
+  DESIGN_UI: "Thiết kế giao diện & Prototype (Figma / UI)",
+  TECH_SPEC: "Kiến trúc hệ thống & Tech Spec",
+  PRD_PLAN: "Kế hoạch sản phẩm & PRD",
+  ACCEPTANCE_MINUTES: "Biên bản bàn giao & Nghiệm thu",
+  USER_GUIDE: "Tài liệu hướng dẫn sử dụng & Vận hành",
+  MEETING_REPORT: "Biên bản họp & Báo cáo kỹ thuật",
+
+  // Common
   OTHER: "Tài liệu khác",
 };
+
+export const GOV_DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
+  { value: "CONG_VAN_DI", label: "Công văn IGB gửi đi" },
+  { value: "CONG_VAN_DEN", label: "Công văn trả lời của Tỉnh" },
+  { value: "MOU", label: "Biên bản ghi nhớ (MOU)" },
+  { value: "LOGO_ASSETS", label: "Logo & Bộ nhận diện tỉnh" },
+  { value: "DATA_SHEET", label: "Dữ liệu chuyên ngành (Địa điểm/Địa chính/Y tế)" },
+  { value: "OTHER", label: "Tài liệu khác" },
+];
+
+export const OUTSOURCE_DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
+  { value: "CONTRACT", label: "Hợp đồng & Phụ lục kinh tế" },
+  { value: "REQUIREMENT", label: "Đặc tả yêu cầu phần mềm (SRS / BRD)" },
+  { value: "DESIGN_UI", label: "Thiết kế giao diện & Prototype (Figma / UI)" },
+  { value: "ACCEPTANCE_MINUTES", label: "Biên bản bàn giao & Nghiệm thu" },
+  { value: "USER_GUIDE", label: "Tài liệu hướng dẫn sử dụng & Vận hành" },
+  { value: "OTHER", label: "Tài liệu khác" },
+];
+
+export const INTERNAL_DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
+  { value: "PRD_PLAN", label: "Kế hoạch sản phẩm & PRD" },
+  { value: "TECH_SPEC", label: "Kiến trúc hệ thống & Tech Spec" },
+  { value: "DESIGN_UI", label: "Thiết kế giao diện & Prototype (Figma / UI)" },
+  { value: "USER_GUIDE", label: "Tài liệu hướng dẫn sử dụng & Vận hành nội bộ" },
+  { value: "MEETING_REPORT", label: "Biên bản họp & Báo cáo kỹ thuật" },
+  { value: "OTHER", label: "Tài liệu khác" },
+];
 
 export const REGIONS: Region[] = ["Bắc Bộ", "Trung Bộ", "Nam Bộ", "Tây Nguyên"];
 
