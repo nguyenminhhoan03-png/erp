@@ -178,12 +178,18 @@ export function UserSingleSelect({
                   onChange("");
                   setOpen(false);
                 }}
-                className="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer text-xs text-muted-foreground hover:text-foreground"
+                className={cn(
+                  "flex items-center justify-between gap-2 p-1.5 rounded-lg cursor-pointer text-xs transition-colors",
+                  !value ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"
+                )}
               >
-                <div className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center shrink-0">
-                  <UserX className="h-3 w-3" />
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center shrink-0">
+                    <UserX className="h-3 w-3" />
+                  </div>
+                  <span>{clearLabel}</span>
                 </div>
-                <span className="italic">{clearLabel}</span>
+                {!value && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
               </DropdownMenuItem>
             )}
 

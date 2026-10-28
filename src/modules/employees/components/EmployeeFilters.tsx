@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Search, UserPlus, Filter, RotateCcw, LayoutGrid, List } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import { Button } from "@/shared/components/ui/button";
@@ -21,8 +22,28 @@ export function EmployeeFilters({
   viewMode,
   onViewModeChange,
 }: EmployeeFiltersProps) {
-  const { filter, setFilter, resetFilter, openCreate } = useEmployeeStore();
+  const router = useRouter();
+  const { filter, setFilter, resetFilter } = useEmployeeStore();
+  const options = useEmployeeStore((s) => s.options);
   const departments = useUserStore((s) => s.departments);
+  const deptList: Array<{ id: string; name: string }> = (options?.departments && options.departments.length > 0)
+    ? options.departments.map((d) => ({ id: String(d.id), name: d.name }))
+    : departments;
+
+  const [searchTerm, setSearchTerm] = React.useState(filter.search || "");
+
+  React.useEffect(() => {
+    setSearchTerm(filter.search || "");
+  }, [filter.search]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm !== (filter.search || "")) {
+        setFilter({ search: searchTerm });
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm, filter.search, setFilter]);
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/50 backdrop-blur-sm p-4 shadow-xs">
@@ -30,8 +51,8 @@ export function EmployeeFilters({
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            value={filter.search}
-            onChange={(e) => setFilter({ search: e.target.value })}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Tìm theo tên, mã NV, email, số điện thoại..."
             className="pl-10 h-10 bg-background/80 rounded-xl border-border/80 text-sm focus-visible:ring-1 focus-visible:ring-primary"
           />
@@ -66,11 +87,11 @@ export function EmployeeFilters({
           </div>
 
           <Button
-            onClick={openCreate}
+            onClick={() => router.push("/employees/create")}
             className="h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-sm gap-2 shadow-sm transition-all"
           >
             <UserPlus className="h-4 w-4" />
-            <span>Thêm nhân viên</span>
+            <span>Thêm nhân sự</span>
           </Button>
         </div>
       </div>
@@ -91,23 +112,11 @@ export function EmployeeFilters({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Tất cả phòng ban</SelectItem>
-              <SelectItem value="it">Công nghệ thông tin</SelectItem>
-              <SelectItem value="hr">Nhân sự & Tuyển dụng</SelectItem>
-              <SelectItem value="marketing">Marketing</SelectItem>
-              <SelectItem value="sales">Kinh doanh</SelectItem>
-              <SelectItem value="accounting">Kế toán & Tài chính</SelectItem>
-              {departments
-                .filter(
-                  (d) =>
-                    !["it", "hr", "marketing", "sales", "accounting"].includes(
-                      d.id
-                    )
-                )
-                .map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name}
-                  </SelectItem>
-                ))}
+              {deptList.map((d) => (
+                <SelectItem key={d.id} value={d.id}>
+                  {d.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

@@ -1,6 +1,5 @@
-"use client";
-
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Filter,
@@ -63,6 +62,7 @@ function getPageNumbers(current: number, total: number): (number | "...")[] {
 }
 
 export function GovTableView() {
+  const router = useRouter();
   const {
     projects,
     filters,
@@ -93,12 +93,12 @@ export function GovTableView() {
   };
 
   const activeProjects = React.useMemo(() => {
-    return projects.filter((p) => !activeSolutionId || p.solutionId === activeSolutionId);
+    return projects.filter((p) => !activeSolutionId || p.solutionId === activeSolutionId || p.projectId === activeSolutionId);
   }, [projects, activeSolutionId]);
 
   const filteredProjects = React.useMemo(() => {
     return projects.filter((p) => {
-      if (activeSolutionId && p.solutionId !== activeSolutionId) return false;
+      if (activeSolutionId && p.solutionId !== activeSolutionId && p.projectId !== activeSolutionId) return false;
 
       if (filters.search && filters.search.trim()) {
         const q = filters.search.toLowerCase().trim();
@@ -300,7 +300,7 @@ export function GovTableView() {
                   return (
                     <tr
                       key={project.id}
-                      onClick={() => setSelectedProject(project)}
+                      onClick={() => router.push(`/projects/${project.id}`)}
                       className="hover:bg-muted/40 transition-colors cursor-pointer group"
                     >
                       <td className="py-3 px-4 text-center font-mono text-muted-foreground">

@@ -7,6 +7,7 @@ export interface GovBootstrapSolutionDto {
   color_hex?: string;
   badge_class?: string;
   target_gov_department?: string;
+  target_department?: string;
   data_asset_description?: string;
   description?: string;
   active_count?: number;
@@ -79,18 +80,24 @@ export interface GovProjectDto {
 export interface GovDocumentDto {
   id: number | string;
   project_id?: number | string;
+  projectId?: number | string;
   gov_project_id?: number | string;
   solution_id?: number | string;
+  solutionId?: number | string;
   title: string;
   type?: string;
   file_url?: string;
   fileUrlOrLink?: string;
   file_name?: string;
+  fileName?: string;
   file_size?: number | string;
+  fileSize?: number | string;
   note?: string;
   created_at?: string;
   uploaded_at?: string;
+  uploadedAt?: string;
   uploaded_by?: string;
+  uploadedBy?: string;
 }
 
 export interface GovWorkLogDto {
@@ -120,36 +127,69 @@ export interface GovMeetingScheduleDto {
   id: number | string;
   category?: string;
   event_type?: string;
+  eventType?: string;
   project_id?: number | string;
+  projectId?: number | string;
+  gov_project_id?: number | string;
+  govProjectId?: number | string;
   solution_id?: number | string;
+  solutionId?: number | string;
+  project_name?: string;
+  projectName?: string;
   department?: string;
   client_name?: string;
+  clientName?: string;
   province_id?: number;
+  provinceId?: number;
   stage_id?: number | string | null;
+  stageId?: number | string | null;
   stage_name?: string;
+  stageName?: string;
   stage_color?: string;
+  stageColor?: string;
   stage_order?: number;
+  stageOrder?: number;
   province_name?: string;
+  provinceName?: string;
   scheduled_at?: string;
+  scheduledAt?: string;
+  start_time?: string;
+  startTime?: string;
   location?: string;
-  content: string;
+  content?: string;
   title?: string;
+  description?: string;
   notes?: string;
   host_name?: string;
+  hostName?: string;
   host_user?: string;
+  hostUser?: string;
   host_user_id?: number;
+  hostUserId?: number;
   participant_ids?: (string | number)[];
+  participantIds?: (string | number)[];
   meeting_type?: string;
+  meetingType?: string;
   duration_minutes?: number;
+  durationMinutes?: number;
   end_time?: string;
+  endTime?: string;
   contact_person?: string;
+  contactPerson?: string;
   partner_participants?: string;
+  partnerParticipants?: string;
   status?: string;
+  is_master_calendar?: boolean;
+  isMasterCalendar?: boolean;
   has_conflict?: boolean;
+  hasConflict?: boolean;
   conflicting_with?: string;
+  conflictingWith?: string;
   conflicts?: any[];
   conflict_user_ids?: (string | number)[];
+  conflictUserIds?: (string | number)[];
   conflict_checked?: boolean;
+  conflictChecked?: boolean;
 }
 
 export interface GovBootstrapDto {

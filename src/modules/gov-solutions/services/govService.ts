@@ -72,12 +72,14 @@ export const govService = {
       icon_name: data.iconName || "Compass",
       color_hex: data.colorHex || "#3b82f6",
       badge_class: data.badgeClass || "bg-blue-500/10 text-blue-600",
-      target_gov_department: data.targetGovDepartment || "Sở TTTT",
+      target_department: data.targetGovDepartment || "",
+      target_gov_department: data.targetGovDepartment || "",
       data_asset_description: data.dataAssetDescription || "",
       description: data.description || "",
       manager_id: data.managerId || null,
       manager_ids: data.managerIds || [],
-      department_id: data.departmentId || null,
+      department_id: data.departmentId || (Array.isArray(data.departmentIds) && data.departmentIds[0] ? data.departmentIds[0] : null),
+      department_ids: data.departmentIds || (data.departmentId ? [data.departmentId] : []),
       partner_id: data.partnerId || null,
       start_date: data.startDate || null,
       end_date: data.endDate || null,
@@ -103,12 +105,14 @@ export const govService = {
       icon_name: data.iconName,
       color_hex: data.colorHex,
       badge_class: data.badgeClass,
+      target_department: data.targetGovDepartment,
       target_gov_department: data.targetGovDepartment,
       data_asset_description: data.dataAssetDescription,
       description: data.description,
       manager_id: data.managerId || null,
       manager_ids: data.managerIds || [],
-      department_id: data.departmentId || null,
+      department_id: data.departmentId || (Array.isArray(data.departmentIds) && data.departmentIds[0] ? data.departmentIds[0] : null),
+      department_ids: data.departmentIds || (data.departmentId ? [data.departmentId] : []),
       partner_id: data.partnerId || null,
       start_date: data.startDate || null,
       end_date: data.endDate || null,
@@ -188,6 +192,17 @@ export const govService = {
     return [];
   },
 
+  async fetchProjectDocs(solutionId: string): Promise<GovDocument[]> {
+    const result = await apiClient.get<{ success: boolean; data: GovDocumentDto[] }>(
+      `/erp/gov-projects/projects/${solutionId}/documents`
+    );
+
+    if (result.type === "success" && Array.isArray(result.data?.data)) {
+      return result.data.data.map(mapGovDocument);
+    }
+    return [];
+  },
+
   async updateProvince(solutionId: string, provinceId: number | string, payload: any): Promise<void> {
     const result = await apiClient.putJson(
       `/erp/gov-projects/projects/${solutionId}/provinces/${provinceId}`,
@@ -213,8 +228,13 @@ export const govService = {
   },
 
   async uploadDocument(formData: FormData): Promise<GovDocument> {
+    const rawProjectId = formData.get("projectId") || formData.get("gov_project_id") || formData.get("project_id");
+    const endpoint = rawProjectId
+      ? `/erp/gov-projects/projects/${rawProjectId}/documents`
+      : "/erp/gov-projects/upload";
+
     const result = await apiClient.postForm<{ success: boolean; data: GovDocumentDto }>(
-      "/erp/gov-projects/upload",
+      endpoint,
       formData
     );
 

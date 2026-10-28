@@ -66,6 +66,7 @@ interface DltmState {
   addDocument: (doc: Omit<DltmDocument, "id" | "uploadedAt"> | FormData) => Promise<boolean>;
   deleteDocument: (docId: string) => Promise<boolean>;
   fetchProvinceDocuments: (projectId: string, provinceId?: number) => Promise<void>;
+  fetchProjectDocuments: (projectId: string) => Promise<void>;
 
   addWorkLog: (log: Omit<DltmWorkLog, "id" | "createdAt">) => Promise<boolean>;
   updateWorkLog: (logId: string, updates: any) => Promise<boolean>;
@@ -213,10 +214,17 @@ export const useGovStore = create<GovState>((set, get) => ({
     try {
       const newProj = await govService.addProvince(solId, {
         province_id: provinceId,
-        stage_id: stageId || 0,
+        stage_id: stageId || 1,
       });
+      if (!newProj.solutionId && solId) newProj.solutionId = String(solId);
+      if (!newProj.projectId && solId) newProj.projectId = String(solId);
       set((state) => ({
-        projects: [...state.projects, newProj],
+        projects: [
+          ...state.projects.filter(
+            (p) => !(p.provinceId === newProj.provinceId && (p.solutionId === String(solId) || p.projectId === String(solId)))
+          ),
+          newProj,
+        ],
       }));
       return true;
     } catch {
@@ -353,6 +361,17 @@ export const useGovStore = create<GovState>((set, get) => ({
     }
   },
 
+  fetchProjectDocuments: async (projectId: string) => {
+    if (!projectId) return;
+    const docs = await govService.fetchProjectDocs(projectId);
+    set((state) => {
+      const otherDocs = state.documents.filter(
+        (d) => String(d.solutionId) !== String(projectId) && String(d.projectId) !== String(projectId)
+      );
+      return { documents: [...docs, ...otherDocs] };
+    });
+  },
+
   addDocument: async (docData) => {
     let newDoc: DltmDocument;
 
@@ -431,7 +450,11 @@ export const useGovStore = create<GovState>((set, get) => ({
   },
 
   addMeeting: async (meetingData) => {
-    const newMeeting = await govService.storeMeeting(meetingData.solutionId || get().activeSolutionId, meetingData);
+    const targetSolutionId =
+      meetingData.solutionId && meetingData.solutionId !== "none"
+        ? meetingData.solutionId
+        : undefined;
+    const newMeeting = await govService.storeMeeting(targetSolutionId, meetingData);
     set((state) => ({
       meetings: [newMeeting, ...state.meetings],
     }));

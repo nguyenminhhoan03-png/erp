@@ -197,15 +197,18 @@ export const DEFAULT_ROLE_CONFIGS: RoleConfig[] = [
     dataScope: "OWN",
     isSystem: true,
   },
-  {
-    id: "LEAD",
-    name: "Trưởng nhóm (Lead)",
-    code: "LEAD",
-    description: "Tech Lead / Team Leader điều phối sprint, phân công và duyệt chất lượng task",
-    color: "purple",
-    dataScope: "DEPARTMENT",
-    isSystem: false,
-  },
+];
+
+const ALL_TASK_PERMISSIONS: PermissionKey[] = [
+  "tasks:view",
+  "tasks:create",
+  "tasks:assign_all",
+  "tasks:assign_self",
+  "tasks:approve",
+  "tasks:verify",
+  "tasks:edit",
+  "tasks:delete",
+  "tasks:export",
 ];
 
 export const ROLE_PERMISSIONS: Record<
@@ -220,15 +223,7 @@ export const ROLE_PERMISSIONS: Record<
     description: "Ban Giám Đốc / Quản trị viên hệ thống với toàn quyền can thiệp",
     dataScope: "GLOBAL",
     permissions: [
-      "tasks:view",
-      "tasks:create",
-      "tasks:assign_all",
-      "tasks:assign_self",
-      "tasks:approve",
-      "tasks:verify",
-      "tasks:edit",
-      "tasks:delete",
-      "tasks:export",
+      ...ALL_TASK_PERMISSIONS,
       "reports:submit",
       "reports:view_department",
       "reports:view_company",
@@ -247,15 +242,7 @@ export const ROLE_PERMISSIONS: Record<
     description: "Trưởng bộ phận quản lý công việc và nhân sự trong phòng ban",
     dataScope: "DEPARTMENT",
     permissions: [
-      "tasks:view",
-      "tasks:create",
-      "tasks:assign_all",
-      "tasks:assign_self",
-      "tasks:approve",
-      "tasks:verify",
-      "tasks:edit",
-      "tasks:delete",
-      "tasks:export",
+      ...ALL_TASK_PERMISSIONS,
       "reports:submit",
       "reports:view_department",
       "reports:export",
@@ -265,35 +252,49 @@ export const ROLE_PERMISSIONS: Record<
       "analytics:view_own",
     ],
   },
-  LEAD: {
-    description: "Tech Lead / Team Leader điều phối sprint, phân công và duyệt chất lượng task",
-    dataScope: "DEPARTMENT",
-    permissions: [
-      "tasks:view",
-      "tasks:create",
-      "tasks:assign_all",
-      "tasks:assign_self",
-      "tasks:verify",
-      "tasks:approve",
-      "tasks:edit",
-      "tasks:export",
-      "reports:submit",
-      "reports:view_department",
-      "employees:view",
-      "analytics:view_department",
-      "analytics:view_own",
-    ],
-  },
   EMPLOYEE: {
-    description: "Nhân viên thực thi công việc và tự quản lý tiến độ cá nhân",
+    description: "Nhân viên thực thi công việc và tự quản lý tiến độ cá nhân (Full quyền công việc)",
     dataScope: "OWN",
     permissions: [
-      "tasks:view",
-      "tasks:create",
-      "tasks:assign_self",
+      ...ALL_TASK_PERMISSIONS,
       "reports:submit",
       "employees:view",
       "analytics:view_own",
     ],
   },
 };
+
+/**
+ * Mapping đồng bộ giữa frontend permission key (dạng module:action)
+ * và database permission_name (dạng snake_case từ backend Laravel)
+ */
+export const PERMISSION_ALIAS_MAP: Record<string, string[]> = {
+  // Tasks (luôn mở full, nhưng vẫn alias chuẩn theo backend)
+  "tasks:view": ["task_list", "task_view"],
+  "tasks:create": ["task_create"],
+  "tasks:edit": ["task_edit"],
+  "tasks:delete": ["task_delete"],
+  "tasks:approve": ["task_approve"],
+  "tasks:export": ["task_export"],
+
+  // Reports
+  "reports:submit": ["daily_report_create"],
+  "reports:view_department": ["daily_report_list", "daily_report_view"],
+  "reports:view_company": ["daily_report_list"],
+  "reports:export": ["daily_report_export"],
+
+  // HRM / Employees
+  "employees:view": ["user_list", "user_view"],
+  "employees:create": ["user_create"],
+  "employees:delete": ["user_delete"],
+  "employees:edit_role": ["user_edit_role"],
+
+  // Analytics
+  "analytics:view_company": ["analytics_view"],
+  "analytics:view_department": ["analytics_view"],
+  "analytics:view_own": ["analytics_view"],
+
+  // System
+  "settings:manage": ["settings_manage"],
+};
+

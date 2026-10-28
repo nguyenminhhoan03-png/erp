@@ -1,19 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Users, Download } from "lucide-react";
+import Link from "next/link";
+import { Users, Download, ShieldAlert } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import { EmployeeStats } from "@/modules/employees/components/EmployeeStats";
 import { EmployeeFilters } from "@/modules/employees/components/EmployeeFilters";
 import { EmployeeTable } from "@/modules/employees/components/EmployeeTable";
 import { EmployeeCardGrid } from "@/modules/employees/components/EmployeeCardGrid";
-import { EmployeeDetailDialog } from "@/modules/employees/components/EmployeeDetailDialog";
-import { EmployeeFormDialog } from "@/modules/employees/components/EmployeeFormDialog";
 import { useEmployeeStore } from "@/modules/employees/store/employeeStore";
+import { usePermission } from "@/shared/permissions/PermissionGuard";
+import { AccessDenied } from "@/shared/components/AccessDenied";
 
 export default function EmployeesPage() {
+  const canView = usePermission("user_list");
+
   const [viewMode, setViewMode] = React.useState<"table" | "grid">("table");
-  const employees = useEmployeeStore((s) => s.employees);
+  const { employees, loadEmployees, loadOptions, isLoading } = useEmployeeStore();
+
+  React.useEffect(() => {
+    if (canView) {
+      loadEmployees();
+      loadOptions();
+    }
+  }, [loadEmployees, loadOptions, canView]);
+
+  if (!canView) {
+    return <AccessDenied moduleName="nhân sự" />;
+  }
 
   const handleExport = () => {
     const csvContent =
@@ -45,9 +58,9 @@ export default function EmployeesPage() {
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
             <span>Trang chủ</span>
             <span>/</span>
-            <span>Quản lý nhân sự</span>
+            <span>Quản lý tổ chức</span>
             <span>/</span>
-            <span className="text-foreground font-medium">Nhân viên</span>
+            <span className="text-foreground font-medium">Nhân sự</span>
           </div>
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
@@ -55,7 +68,7 @@ export default function EmployeesPage() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                Danh sách nhân viên
+                Danh sách nhân sự
               </h1>
               <p className="text-xs text-muted-foreground">
                 Quản lý thông tin hồ sơ, phòng ban, chức vụ và loại hình hợp đồng nhân sự
@@ -77,17 +90,12 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      <EmployeeStats />
-
       <EmployeeFilters
         viewMode={viewMode}
         onViewModeChange={setViewMode}
       />
 
       {viewMode === "table" ? <EmployeeTable /> : <EmployeeCardGrid />}
-
-      <EmployeeDetailDialog />
-      <EmployeeFormDialog />
     </div>
   );
 }

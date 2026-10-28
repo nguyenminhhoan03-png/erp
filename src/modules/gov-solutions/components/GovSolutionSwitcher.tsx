@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   Compass,
   Map,
@@ -43,6 +44,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 export function GovSolutionSwitcher() {
+  const router = useRouter();
   const {
     solutions,
     activeSolutionId,
@@ -284,7 +286,7 @@ export function GovSolutionSwitcher() {
 
           <Button
             size="sm"
-            onClick={() => setCreateSolutionOpen(true)}
+            onClick={() => router.push("/projects/create")}
             className="h-9 px-3.5 rounded-xl text-xs gap-1.5 font-semibold shrink-0 cursor-pointer shadow-2xs"
           >
             <Plus className="w-4 h-4" />

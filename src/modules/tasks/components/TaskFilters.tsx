@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { UserSingleSelect } from "./form/UserSingleSelect";
 import { cn } from "@/lib/utils";
 
 export function TaskFilters() {
@@ -277,27 +278,16 @@ export function TaskFilters() {
           </Select>
         </div>
 
-        <div className="w-[170px]">
-          <Select
-            value={filters.assigneeId || "ALL"}
-            onValueChange={(val) => setFilters({ assigneeId: val })}
-          >
-            <SelectTrigger className="h-8.5 rounded-lg bg-card/60 text-xs">
-              <SelectValue placeholder="Người thực hiện">
-                {!filters.assigneeId || filters.assigneeId === "ALL"
-                  ? "Tất cả người nhận"
-                  : users.find((u) => u.id === filters.assigneeId)?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Tất cả người nhận</SelectItem>
-              {users.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.name} ({u.title})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="w-[185px]">
+          <UserSingleSelect
+            value={filters.assigneeId && filters.assigneeId !== "ALL" ? filters.assigneeId : null}
+            onChange={(userId) => setFilters({ assigneeId: userId || "ALL" })}
+            placeholder="Tất cả người nhận"
+            searchPlaceholder="Tìm nhân sự..."
+            allowClear
+            clearLabel="Tất cả người nhận"
+            triggerClassName="h-8.5 rounded-lg bg-card/60 text-xs"
+          />
         </div>
 
         <div className="w-[175px]">

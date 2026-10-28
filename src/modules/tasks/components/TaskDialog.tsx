@@ -42,7 +42,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/shared/components/ui/dialog";
 import {
   DropdownMenu,

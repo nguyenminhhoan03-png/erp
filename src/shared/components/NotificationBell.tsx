@@ -12,6 +12,7 @@ import {
   FileText,
   Clock,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import { useNotificationStore, NotificationFilter } from "../store/useNotificationStore";
 import { useTaskStore } from "@/modules/tasks/store/taskStore";
@@ -179,6 +180,13 @@ export function NotificationBell() {
         icon: <AlertTriangle className="h-3.5 w-3.5 text-slate-500 shrink-0" />,
         badgeText: "Hủy bỏ",
         badgeBg: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+      };
+    }
+    if (rawType.includes("PARTNER") || rawType.includes("CUSTOMER") || rawType.includes("CONTACT")) {
+      return {
+        icon: <Users className="h-3.5 w-3.5 text-blue-500 shrink-0" />,
+        badgeText: "Khách hàng",
+        badgeBg: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
       };
     }
     return {

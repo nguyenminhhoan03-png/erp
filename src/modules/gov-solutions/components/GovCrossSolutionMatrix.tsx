@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Filter,
@@ -19,6 +20,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Input } from "@/shared/components/ui/input";
 
 export function GovCrossSolutionMatrix() {
+  const router = useRouter();
   const { solutions, projects, setSelectedProject, setActiveSolutionId, setActiveMainTab } =
     useGovStore();
 
@@ -63,7 +65,7 @@ export function GovCrossSolutionMatrix() {
   const projectMap = useMemo(() => {
     const map = new Map<string, DltmProject>();
     projects.forEach((p) => {
-      const key = `${p.code}_${p.solutionId}`;
+      const key = `${p.code}_${p.solutionId || p.projectId}`;
       map.set(key, p);
     });
     return map;
@@ -71,7 +73,7 @@ export function GovCrossSolutionMatrix() {
 
   const solutionStats = useMemo(() => {
     return solutions.map((sol) => {
-      const solProjects = projects.filter((p) => p.solutionId === sol.id);
+      const solProjects = projects.filter((p) => (p.solutionId || p.projectId) === sol.id);
       const activeCount = solProjects.filter(
         (p) => p.stage !== "PAUSED" && p.stage !== "DISPATCHED"
       ).length;
@@ -90,7 +92,7 @@ export function GovCrossSolutionMatrix() {
     const key = `${provCode}_${solutionId}`;
     const targetProject = projectMap.get(key);
     if (targetProject) {
-      setSelectedProject(targetProject);
+      router.push(`/projects/${targetProject.id}`);
     }
   };
 

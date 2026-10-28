@@ -342,7 +342,7 @@ function GovCalendarContent() {
         <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             size="sm"
-            onClick={() => setOpenCreateDialog(true)}
+            onClick={() => handleOpenCreateForDate(new Date())}
             className="h-9 text-xs font-semibold gap-1.5 rounded-xl shadow-2xs cursor-pointer"
           >
             <CalendarPlus className="h-4 w-4" />

@@ -1,206 +1,25 @@
 import { create } from "zustand";
-import { Employee, EmployeeFilter, UserType, EmployeeStatus } from "../types";
+import { Employee, EmployeeFilter } from "../types";
+import { employeeService, EmployeeOptionsData } from "../services/employeeService";
+import { toast } from "sonner";
 
-const INITIAL_EMPLOYEES: Employee[] = [
-  {
-    id: "emp-1",
-    code: "NV-001",
-    name: "Nguyễn Minh Hoàn",
-    email: "hoan.nm@company.com",
-    phone: "0987654321",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-    departmentId: "it",
-    departmentName: "Công nghệ thông tin",
-    position: "Trưởng phòng Kỹ thuật",
-    role: "ADMIN",
-    userType: "nhan_vien_chinh_thuc",
-    status: "Active",
-    joinedDate: "2022-03-15",
-    birthday: "1994-08-20",
-    cccd: "001094012345",
-    salary: 35000000,
-    bankAccount: {
-      bankName: "Vietcombank",
-      accountNumber: "0011004567890",
-      holderName: "NGUYEN MINH HOAN",
-      branch: "Hà Nội",
-    },
-    address: "Cầu Giấy, Hà Nội",
-  },
-  {
-    id: "emp-2",
-    code: "NV-002",
-    name: "Trần Thị Mai",
-    email: "mai.tt@company.com",
-    phone: "0912345678",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-    departmentId: "hr",
-    departmentName: "Nhân sự & Tuyển dụng",
-    position: "Chuyên viên HR Senior",
-    role: "MANAGER",
-    userType: "nhan_vien_chinh_thuc",
-    status: "Active",
-    joinedDate: "2023-01-10",
-    birthday: "1996-05-12",
-    cccd: "025096054321",
-    salary: 22000000,
-    bankAccount: {
-      bankName: "Techcombank",
-      accountNumber: "19034567891011",
-      holderName: "TRAN THI MAI",
-      branch: "Đống Đa, Hà Nội",
-    },
-    address: "Ba Đình, Hà Nội",
-  },
-  {
-    id: "emp-3",
-    code: "NV-003",
-    name: "Lê Hoàng Nam",
-    email: "nam.lh@company.com",
-    phone: "0934567890",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-    departmentId: "it",
-    departmentName: "Công nghệ thông tin",
-    position: "Senior Fullstack Developer",
-    role: "EMPLOYEE",
-    userType: "nhan_vien_chinh_thuc",
-    status: "Active",
-    joinedDate: "2023-06-01",
-    birthday: "1997-11-25",
-    cccd: "001097008899",
-    salary: 28000000,
-    bankAccount: {
-      bankName: "MB Bank",
-      accountNumber: "0934567890",
-      holderName: "LE HOANG NAM",
-      branch: "Thăng Long, Hà Nội",
-    },
-    address: "Thanh Xuân, Hà Nội",
-  },
-  {
-    id: "emp-4",
-    code: "NV-004",
-    name: "Phạm Thu Hương",
-    email: "huong.pt@company.com",
-    phone: "0945678901",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
-    departmentId: "marketing",
-    departmentName: "Marketing & Truyền thông",
-    position: "Trưởng nhóm Digital Marketing",
-    role: "MANAGER",
-    userType: "nhan_vien_chinh_thuc",
-    status: "Active",
-    joinedDate: "2023-08-15",
-    birthday: "1995-03-30",
-    cccd: "031095007788",
-    salary: 25000000,
-    bankAccount: {
-      bankName: "VPBank",
-      accountNumber: "9876543210",
-      holderName: "PHAM THU HUONG",
-      branch: "Hà Nội",
-    },
-    address: "Hoàn Kiếm, Hà Nội",
-  },
-  {
-    id: "emp-5",
-    code: "NV-005",
-    name: "Đặng Quốc Huy",
-    email: "huy.dq@company.com",
-    phone: "0967890123",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
-    departmentId: "sales",
-    departmentName: "Kinh doanh & Phát triển thị trường",
-    position: "Chuyên viên Kinh doanh B2B",
-    role: "EMPLOYEE",
-    userType: "thu_viec",
-    status: "Active",
-    joinedDate: "2026-09-01",
-    birthday: "1999-07-18",
-    cccd: "001099003344",
-    salary: 14000000,
-    bankAccount: {
-      bankName: "VietinBank",
-      accountNumber: "102005432198",
-      holderName: "DANG QUOC HUY",
-      branch: "Hà Đông, Hà Nội",
-    },
-    address: "Hà Đông, Hà Nội",
-  },
-  {
-    id: "emp-6",
-    code: "NV-006",
-    name: "Vũ Bảo Ngọc",
-    email: "ngoc.vb@company.com",
-    phone: "0978901234",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
-    departmentId: "accounting",
-    departmentName: "Kế toán & Tài chính",
-    position: "Kế toán tổng hợp",
-    role: "EMPLOYEE",
-    userType: "nhan_vien_chinh_thuc",
-    status: "Active",
-    joinedDate: "2024-02-20",
-    birthday: "1998-12-05",
-    cccd: "022098001122",
-    salary: 18000000,
-    bankAccount: {
-      bankName: "BIDV",
-      accountNumber: "12310009876543",
-      holderName: "VU BAO NGOC",
-      branch: "Quang Trung, Hà Nội",
-    },
-    address: "Nam Từ Liêm, Hà Nội",
-  },
-  {
-    id: "emp-7",
-    code: "NV-007",
-    name: "Hoàng Minh Tuấn",
-    email: "tuan.hm@company.com",
-    phone: "0989012345",
-    avatar: "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80",
-    departmentId: "it",
-    departmentName: "Công nghệ thông tin",
-    position: "Thực tập sinh UI/UX Design",
-    role: "EMPLOYEE",
-    userType: "thuc_tap_sinh",
-    status: "Active",
-    joinedDate: "2026-10-01",
-    birthday: "2003-04-14",
-    cccd: "001203004455",
-    salary: 5000000,
-    bankAccount: {
-      bankName: "TPBank",
-      accountNumber: "02468135790",
-      holderName: "HOANG MINH TUAN",
-      branch: "Hà Nội",
-    },
-    address: "Cầu Giấy, Hà Nội",
-  },
-  {
-    id: "emp-8",
-    code: "NV-008",
-    name: "Đỗ Phương Linh",
-    email: "linh.dp@company.com",
-    phone: "0901234567",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-    departmentId: "marketing",
-    departmentName: "Marketing & Truyền thông",
-    position: "Cộng tác viên Nội dung (Content Creator)",
-    role: "EMPLOYEE",
-    userType: "cong_tac_vien",
-    status: "Active",
-    joinedDate: "2026-08-01",
-    birthday: "2001-09-09",
-    cccd: "001201006677",
-    salary: 8000000,
-    address: "Tây Hồ, Hà Nội",
-  },
-];
+export interface EmployeePagination {
+  page: number;
+  perPage: number;
+  cursor: string | null;
+  nextCursor: string | null;
+  prevCursor: string | null;
+  hasMore: boolean;
+  total: number;
+  cursorHistory: (string | null)[];
+}
 
 interface EmployeeState {
   employees: Employee[];
+  isLoading: boolean;
+  options: EmployeeOptionsData | null;
   filter: EmployeeFilter;
+  pagination: EmployeePagination;
   selectedEmployee: Employee | null;
   isDetailOpen: boolean;
   isFormOpen: boolean;
@@ -208,15 +27,21 @@ interface EmployeeState {
 
   setFilter: (updates: Partial<EmployeeFilter>) => void;
   resetFilter: () => void;
+  setPerPage: (perPage: number) => Promise<void>;
+  nextPage: () => Promise<void>;
+  prevPage: () => Promise<void>;
+  goToFirstPage: () => Promise<void>;
   openCreate: () => void;
   openEdit: (emp: Employee) => void;
   closeForm: () => void;
   openDetail: (emp: Employee) => void;
   closeDetail: () => void;
-  addEmployee: (data: Omit<Employee, "id" | "code">) => void;
-  updateEmployee: (id: string, updates: Partial<Employee>) => void;
-  deleteEmployee: (id: string) => void;
-  toggleStatus: (id: string) => void;
+  loadEmployees: (targetCursor?: string | null, targetPage?: number) => Promise<void>;
+  loadOptions: () => Promise<void>;
+  addEmployee: (data: Omit<Employee, "id" | "code">) => Promise<void>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
+  toggleStatus: (id: string) => Promise<void>;
 }
 
 const DEFAULT_FILTER: EmployeeFilter = {
@@ -226,18 +51,105 @@ const DEFAULT_FILTER: EmployeeFilter = {
   status: "ALL",
 };
 
+const DEFAULT_PAGINATION: EmployeePagination = {
+  page: 1,
+  perPage: 20,
+  cursor: null,
+  nextCursor: null,
+  prevCursor: null,
+  hasMore: false,
+  total: 0,
+  cursorHistory: [null],
+};
+
 export const useEmployeeStore = create<EmployeeState>((set, get) => ({
-  employees: INITIAL_EMPLOYEES,
+  employees: [],
+  isLoading: false,
+  options: null,
   filter: DEFAULT_FILTER,
+  pagination: DEFAULT_PAGINATION,
   selectedEmployee: null,
   isDetailOpen: false,
   isFormOpen: false,
   editingEmployee: null,
 
-  setFilter: (updates) =>
-    set((state) => ({ filter: { ...state.filter, ...updates } })),
+  setFilter: (updates) => {
+    set((state) => ({
+      filter: { ...state.filter, ...updates },
+      pagination: {
+        ...state.pagination,
+        page: 1,
+        cursor: null,
+        cursorHistory: [null],
+      },
+    }));
+    get().loadEmployees(null, 1);
+  },
 
-  resetFilter: () => set({ filter: DEFAULT_FILTER }),
+  resetFilter: () => {
+    set({
+      filter: DEFAULT_FILTER,
+      pagination: DEFAULT_PAGINATION,
+    });
+    get().loadEmployees(null, 1);
+  },
+
+  setPerPage: async (perPage: number) => {
+    set((state) => ({
+      pagination: {
+        ...state.pagination,
+        perPage,
+        page: 1,
+        cursor: null,
+        cursorHistory: [null],
+      },
+    }));
+    await get().loadEmployees(null, 1);
+  },
+
+  nextPage: async () => {
+    const { pagination, isLoading } = get();
+    if (isLoading || !pagination.nextCursor) return;
+
+    const nextTargetPage = pagination.page + 1;
+    const history = [...pagination.cursorHistory];
+    history[nextTargetPage - 1] = pagination.nextCursor;
+
+    set((state) => ({
+      pagination: {
+        ...state.pagination,
+        cursorHistory: history,
+      },
+    }));
+
+    await get().loadEmployees(pagination.nextCursor, nextTargetPage);
+  },
+
+  prevPage: async () => {
+    const { pagination, isLoading } = get();
+    if (isLoading || pagination.page <= 1) return;
+
+    const prevTargetPage = pagination.page - 1;
+    const targetCursor = pagination.cursorHistory[prevTargetPage - 1] ?? null;
+
+    await get().loadEmployees(targetCursor, prevTargetPage);
+  },
+
+  goToFirstPage: async () => {
+    const { isLoading, pagination } = get();
+    if (isLoading || pagination.page === 1) return;
+
+    set((state) => ({
+      pagination: {
+        ...state.pagination,
+        page: 1,
+        cursor: null,
+        cursorHistory: [null],
+      },
+    }));
+
+    await get().loadEmployees(null, 1);
+  },
 
   openCreate: () => set({ isFormOpen: true, editingEmployee: null }),
 
@@ -249,49 +161,132 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
 
   closeDetail: () => set({ isDetailOpen: false, selectedEmployee: null }),
 
-  addEmployee: (data) => {
-    const list = get().employees;
-    const nextIndex = list.length + 1;
-    const code = `NV-${String(nextIndex).padStart(3, "0")}`;
-    const newEmp: Employee = {
-      ...data,
-      id: `emp-${Date.now()}`,
-      code,
-      status: data.status || "Active",
-      joinedDate: data.joinedDate || new Date().toISOString().split("T")[0],
-    };
-    set({ employees: [newEmp, ...list], isFormOpen: false });
+  loadEmployees: async (targetCursor?: string | null, targetPage?: number) => {
+    set({ isLoading: true });
+    try {
+      const { filter, pagination } = get();
+      const cursorToUse = targetCursor !== undefined ? targetCursor : pagination.cursor;
+      const pageToUse = targetPage !== undefined ? targetPage : pagination.page;
+
+      const res = await employeeService.getEmployees(filter, cursorToUse, pagination.perPage);
+
+      if (res?.data) {
+        set((state) => ({
+          employees: res.data,
+          pagination: {
+            ...state.pagination,
+            page: pageToUse,
+            cursor: cursorToUse ?? null,
+            nextCursor: res.meta?.next_cursor ?? null,
+            prevCursor: res.meta?.prev_cursor ?? null,
+            hasMore: Boolean(res.meta?.has_more),
+            total: res.meta?.total ?? res.data.length,
+          },
+        }));
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Không thể tải danh sách nhân sự");
+      set({ employees: [] });
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
-  updateEmployee: (id, updates) => {
-    set((state) => ({
-      employees: state.employees.map((e) =>
-        e.id === id ? { ...e, ...updates } : e
-      ),
-      selectedEmployee:
-        state.selectedEmployee?.id === id
-          ? { ...state.selectedEmployee, ...updates }
-          : state.selectedEmployee,
-      isFormOpen: false,
-      editingEmployee: null,
-    }));
+  loadOptions: async () => {
+    try {
+      const res = await employeeService.getOptions();
+      if (res?.data) {
+        set({ options: res.data });
+      }
+    } catch {
+      toast.error("Không thể tải danh mục cấu hình nhân sự");
+    }
   },
 
-  deleteEmployee: (id) => {
-    set((state) => ({
-      employees: state.employees.filter((e) => e.id !== id),
-      isDetailOpen: state.selectedEmployee?.id === id ? false : state.isDetailOpen,
-      selectedEmployee: state.selectedEmployee?.id === id ? null : state.selectedEmployee,
-    }));
+  addEmployee: async (data) => {
+    set({ isLoading: true });
+    try {
+      const res = await employeeService.createEmployee(data);
+      if (res?.data) {
+        set((state) => ({
+          employees: [res.data!, ...state.employees],
+          isFormOpen: false,
+        }));
+        toast.success(res.message || "Thêm nhân sự mới thành công");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Không thể thêm nhân sự");
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
-  toggleStatus: (id) => {
-    set((state) => ({
-      employees: state.employees.map((e) =>
-        e.id === id
-          ? { ...e, status: e.status === "Active" ? "Inactive" : "Active" }
-          : e
-      ),
-    }));
+  updateEmployee: async (id, updates) => {
+    set({ isLoading: true });
+    try {
+      const res = await employeeService.updateEmployee(id, updates);
+      const updated = res?.data;
+      set((state) => ({
+        employees: state.employees.map((e) =>
+          e.id === id ? (updated ? { ...e, ...updated } : { ...e, ...updates }) : e
+        ),
+        selectedEmployee:
+          state.selectedEmployee?.id === id
+            ? updated
+              ? { ...state.selectedEmployee, ...updated }
+              : { ...state.selectedEmployee, ...updates }
+            : state.selectedEmployee,
+        isFormOpen: false,
+        editingEmployee: null,
+      }));
+      toast.success(res.message || "Cập nhật thông tin nhân sự thành công");
+    } catch (err: any) {
+      toast.error(err.message || "Không thể cập nhật nhân sự");
+      throw err;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  deleteEmployee: async (id) => {
+    try {
+      const res = await employeeService.deleteEmployee(id);
+      set((state) => ({
+        employees: state.employees.filter((e) => e.id !== id),
+        isDetailOpen: state.selectedEmployee?.id === id ? false : state.isDetailOpen,
+        selectedEmployee: state.selectedEmployee?.id === id ? null : state.selectedEmployee,
+        pagination: {
+          ...state.pagination,
+          total: Math.max(0, state.pagination.total - 1),
+        },
+      }));
+      toast.success(res?.message || "Đã xóa nhân sự thành công");
+    } catch (err: any) {
+      toast.error(err.message || "Không thể xóa nhân sự");
+      throw err;
+    }
+  },
+
+  toggleStatus: async (id) => {
+    try {
+      const res = await employeeService.toggleStatus(id);
+      const currentEmp = get().employees.find((e) => e.id === id);
+      const newStatus = res?.status || (currentEmp?.status === "Active" ? "Inactive" : "Active");
+
+      set((state) => ({
+        employees: state.employees.map((e) =>
+          e.id === id ? { ...e, status: newStatus as any } : e
+        ),
+        selectedEmployee:
+          state.selectedEmployee?.id === id
+            ? { ...state.selectedEmployee, status: newStatus as any }
+            : state.selectedEmployee,
+      }));
+      toast.success(res?.message || `Đã chuyển trạng thái sang ${newStatus}`);
+    } catch (err: any) {
+      toast.error(err.message || "Không thể đổi trạng thái nhân sự");
+      throw err;
+    }
   },
 }));

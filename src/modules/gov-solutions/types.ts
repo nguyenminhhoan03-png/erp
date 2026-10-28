@@ -23,6 +23,8 @@ export interface DigitalSolution {
   budget?: number | null;
   category?: "GOV" | "INTERNAL" | "OUTSOURCE" | string;
   departmentId?: number | string | null;
+  departmentIds?: (number | string)[];
+  departments?: { id: number | string; name: string }[];
   partnerId?: number | string | null;
   departmentName?: string;
   partnerName?: string;
@@ -121,7 +123,9 @@ export interface GovMeetingSchedule {
   category?: MeetingCategory;
   eventType?: MeetingCategory;
   projectId?: string;
+  govProjectId?: string;
   solutionId?: string;
+  projectName?: string;
   department?: string;
   clientName?: string;
   provinceId?: number;

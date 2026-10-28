@@ -201,6 +201,14 @@ export function GovMeetingDialog({
         } catch (e) {
           console.error("Error setting default date:", e);
         }
+      } else if (!scheduledAt) {
+        const dt = new Date();
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, "0");
+        const d = String(dt.getDate()).padStart(2, "0");
+        const initStart = `${y}-${m}-${d}T09:00`;
+        setScheduledAt(initStart);
+        setEndTime(addMinutesToLocalDatetime(initStart, durationMinutes || 60));
       }
 
       if (defaultProjectId) {
@@ -211,6 +219,7 @@ export function GovMeetingDialog({
         }
       } else if (defaultSolutionId) {
         setSolutionId(defaultSolutionId);
+        setProjectId("");
       } else {
         setSolutionId("");
         setProjectId("");
@@ -306,26 +315,36 @@ export function GovMeetingDialog({
       const computedEndTime =
         endTime || (scheduledAt ? addMinutesToLocalDatetime(scheduledAt, durationMinutes) : undefined);
 
+      const hasSolution = Boolean(solutionId && solutionId !== "none");
+      const hasProject = Boolean(projectId && projectId !== "none");
+      const startTimeStr = scheduledAt.replace("T", " ") + (scheduledAt.length === 16 ? ":00" : "");
+      const endTimeStr = computedEndTime
+        ? computedEndTime.replace("T", " ") + (computedEndTime.length === 16 ? ":00" : "")
+        : null;
+
       const result = await addMeeting({
         category: (isGovMission ? "CONG_TAC" : "HOP_NOI_BO") as any,
-        eventType: (isGovMission ? "CONG_TAC" : "HOP_NOI_BO") as any,
-        projectId: (isGovMission && projectId) ? projectId : undefined,
-        stageId: (isGovMission && projectId && stageId) ? Number(stageId) : undefined,
-        solutionId: solutionId || undefined,
+        event_type: (isGovMission ? "CONG_TAC" : "HOP_NOI_BO") as any,
+        gov_project_id: (isGovMission && hasProject) ? Number(projectId) : null,
+        project_id: hasSolution ? Number(solutionId) : null,
+        stage_id: (isGovMission && hasProject && stageId && stageId !== "none") ? Number(stageId) : null,
+        solutionId: hasSolution ? solutionId : undefined,
         provinceName,
         title: title.trim(),
-        meetingType,
-        durationMinutes: Number(durationMinutes),
-        endTime: computedEndTime ? computedEndTime.replace("T", " ") : undefined,
-        scheduledAt: scheduledAt.replace("T", " "),
+        start_time: startTimeStr,
+        end_time: endTimeStr,
+        duration_minutes: Number(durationMinutes),
         location: finalLocation,
+        meeting_type: meetingType,
+        contact_person: contactPerson.trim() || "Thành viên IGB",
         content: content.trim() || title.trim(),
-        hostUserId: hostUserId ? Number(hostUserId) : undefined,
+        description: content.trim() || title.trim(),
+        host_user_id: hostUserId ? Number(hostUserId) : null,
         hostName,
-        participantIds,
-        contactPerson: contactPerson.trim() || "Thành viên IGB",
+        participant_ids: participantIds.map(Number),
+        is_master_calendar: true,
         status: "UPCOMING",
-      });
+      } as any);
 
       if (result) {
         if (typeof result === "object" && (result as any).hasConflict) {

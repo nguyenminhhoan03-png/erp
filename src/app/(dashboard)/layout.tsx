@@ -10,11 +10,13 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGate>
-      <div className="flex min-h-screen bg-muted/20">
-        <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-h-screen w-full bg-muted/20">
+        <React.Suspense fallback={<aside className="w-64 h-screen border-r border-border/80 bg-card/70" />}>
+          <AppSidebar />
+        </React.Suspense>
+        <div className="flex-1 flex flex-col min-w-0 w-full">
           <Header />
-          <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+          <main className="flex-1 p-6 overflow-y-auto w-full">{children}</main>
         </div>
       </div>
     </AuthGate>

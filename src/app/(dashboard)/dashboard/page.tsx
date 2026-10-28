@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  Plus,
   ArrowRight,
   Calendar,
   ListTodo,
@@ -38,7 +37,7 @@ import { DailyReport, Task } from "@/modules/tasks/types";
 import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { tasks, fetchTasks, openDetail, openCreate, projects: taskProjects, statuses: taskStatuses } = useTaskStore();
+  const { tasks, fetchTasks, openDetail, projects: taskProjects, statuses: taskStatuses } = useTaskStore();
   const { currentUser, departments } = useUserStore();
   const {
     solutions,
@@ -106,7 +105,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-5 w-full pb-10">
-      {/* Minimal Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-3.5">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
@@ -115,28 +113,6 @@ export default function DashboardPage() {
           <p className="text-xs text-muted-foreground mt-0.5">
             Xin chào, <strong className="text-foreground">{currentUser.name}</strong> • Hôm nay là {formatDate(new Date(), "EEEE, dd/MM/yyyy")}
           </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => openCreate()}
-            size="sm"
-            className="h-8.5 text-xs font-semibold gap-1.5 shadow-2xs cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Tạo việc mới</span>
-          </Button>
-
-          <Link href="/daily-report">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8.5 text-xs font-medium gap-1.5 border-border/80 hover:bg-muted/40 cursor-pointer"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Báo cáo ngày</span>
-            </Button>
-          </Link>
         </div>
       </div>
 
@@ -198,7 +174,7 @@ export default function DashboardPage() {
           </div>
           <div className="mt-2.5 flex items-baseline justify-between">
             <span className="text-2xl font-bold text-foreground">{solutions.length}</span>
-            <Link href="/gov-projects" className="text-[11px] text-primary hover:underline font-medium">
+            <Link href="/projects" className="text-[11px] text-primary hover:underline font-medium">
               Xem tất cả ➔
             </Link>
           </div>
@@ -338,7 +314,7 @@ export default function DashboardPage() {
                 Khối dự án đang vận hành
               </span>
               <Link
-                href="/gov-projects"
+                href="/projects"
                 className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
               >
                 <span>Xem danh sách</span>
@@ -349,7 +325,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {/* GOV */}
               <Link
-                href="/gov-projects"
+                href="/projects"
                 className="p-3 rounded-lg border border-border/70 hover:border-primary/50 bg-muted/10 hover:bg-muted/30 transition-all space-y-1 block"
               >
                 <div className="flex items-center justify-between">
@@ -366,7 +342,7 @@ export default function DashboardPage() {
 
               {/* INTERNAL */}
               <Link
-                href="/gov-projects"
+                href="/projects"
                 className="p-3 rounded-lg border border-border/70 hover:border-primary/50 bg-muted/10 hover:bg-muted/30 transition-all space-y-1 block"
               >
                 <div className="flex items-center justify-between">
@@ -383,7 +359,7 @@ export default function DashboardPage() {
 
               {/* OUTSOURCE */}
               <Link
-                href="/gov-projects"
+                href="/projects"
                 className="p-3 rounded-lg border border-border/70 hover:border-primary/50 bg-muted/10 hover:bg-muted/30 transition-all space-y-1 block"
               >
                 <div className="flex items-center justify-between">

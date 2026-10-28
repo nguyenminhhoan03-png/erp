@@ -6,150 +6,13 @@ import { taskStatusService } from "../services/taskStatusService";
 import { User } from "@/shared/types";
 import { checkTaskTransitionPermission } from "@/shared/permissions/can";
 
-const isTaskDone = (st: Task, statuses: CustomTaskStatus[]) => {
-  const sDef = statuses.find((s) => s.key === st.status);
-  if (sDef) {
-    return sDef.category === "DONE";
-  }
-  return st.status === "DONE" || st.status === "CANCELLED" || Boolean(st.closedAt);
-};
-
-const hydrateTaskSubtasks = (task: Task, allTasks: Task[], statuses: CustomTaskStatus[]): Task => {
-  const directSubtasks = task.subTasks || [];
-  const directIds = new Set(directSubtasks.map((st) => String(st.id)));
-  const storeSubtasks = allTasks.filter((t) => String(t.parentId) === String(task.id));
-  const mergedSubtasks = [
-    ...directSubtasks.map((st) => allTasks.find((t) => String(t.id) === String(st.id)) || st),
-    ...storeSubtasks.filter((st) => !directIds.has(String(st.id))),
-  ];
-  return {
-    ...task,
-    subTasks: mergedSubtasks,
-    subtasksCount: mergedSubtasks.length,
-    completedSubtasksCount: mergedSubtasks.filter((st) => isTaskDone(st, statuses)).length,
-  };
-};
-
-const syncTaskInCollection = (
-  tasks: Task[],
-  updatedTask: Task,
-  statuses: CustomTaskStatus[]
-): Task[] => {
-  const parentId = updatedTask.parentId || updatedTask.parent?.id;
-
-  return tasks.map((t) => {
-    if (t.id === updatedTask.id) {
-      return {
-        ...t,
-        ...updatedTask,
-      };
-    }
-
-    if (parentId && String(t.id) === String(parentId)) {
-      const currentSubtasks = t.subTasks || [];
-      const hasSubtask = currentSubtasks.some((st) => String(st.id) === String(updatedTask.id));
-      const nextSubtasks = hasSubtask
-        ? currentSubtasks.map((st) => (String(st.id) === String(updatedTask.id) ? { ...st, ...updatedTask } : st))
-        : [...currentSubtasks, updatedTask];
-      return {
-        ...t,
-        subTasks: nextSubtasks,
-        subtasksCount: nextSubtasks.length,
-        completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
-      };
-    }
-
-    if (t.subTasks && t.subTasks.some((st) => String(st.id) === String(updatedTask.id))) {
-      const nextSubtasks = t.subTasks.map((st) =>
-        String(st.id) === String(updatedTask.id) ? { ...st, ...updatedTask } : st
-      );
-      return {
-        ...t,
-        subTasks: nextSubtasks,
-        subtasksCount: nextSubtasks.length,
-        completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
-      };
-    }
-
-    return t;
-  });
-};
-
-const syncActiveTask = (
-  activeTask: Task | null,
-  updatedTask: Task,
-  statuses: CustomTaskStatus[]
-): Task | null => {
-  if (!activeTask) return null;
-
-  if (activeTask.id === updatedTask.id) {
-    return {
-      ...activeTask,
-      ...updatedTask,
-    };
-  }
-
-  const parentId = updatedTask.parentId || updatedTask.parent?.id;
-  const isParent =
-    (parentId && String(activeTask.id) === String(parentId)) ||
-    Boolean(activeTask.subTasks && activeTask.subTasks.some((st) => String(st.id) === String(updatedTask.id)));
-
-  if (isParent) {
-    const currentSubtasks = activeTask.subTasks || [];
-    const hasSubtask = currentSubtasks.some((st) => String(st.id) === String(updatedTask.id));
-    const nextSubtasks = hasSubtask
-      ? currentSubtasks.map((st) => (String(st.id) === String(updatedTask.id) ? { ...st, ...updatedTask } : st))
-      : [...currentSubtasks, updatedTask];
-    return {
-      ...activeTask,
-      subTasks: nextSubtasks,
-      subtasksCount: nextSubtasks.length,
-      completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
-    };
-  }
-
-  return activeTask;
-};
-
-const removeTaskFromCollection = (
-  tasks: Task[],
-  deletedId: string,
-  statuses: CustomTaskStatus[]
-): Task[] => {
-  return tasks
-    .filter((t) => String(t.id) !== String(deletedId))
-    .map((t) => {
-      if (t.subTasks && t.subTasks.some((st) => String(st.id) === String(deletedId))) {
-        const nextSubtasks = t.subTasks.filter((st) => String(st.id) !== String(deletedId));
-        return {
-          ...t,
-          subTasks: nextSubtasks,
-          subtasksCount: nextSubtasks.length,
-          completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
-        };
-      }
-      return t;
-    });
-};
-
-const removeTaskFromActive = (
-  activeTask: Task | null,
-  deletedId: string,
-  statuses: CustomTaskStatus[]
-): Task | null => {
-  if (!activeTask) return null;
-  if (String(activeTask.id) === String(deletedId)) return null;
-  if (activeTask.subTasks && activeTask.subTasks.some((st) => String(st.id) === String(deletedId))) {
-    const nextSubtasks = activeTask.subTasks.filter((st) => String(st.id) !== String(deletedId));
-    return {
-      ...activeTask,
-      subTasks: nextSubtasks,
-      subtasksCount: nextSubtasks.length,
-      completedSubtasksCount: nextSubtasks.filter((st) => isTaskDone(st, statuses)).length,
-    };
-  }
-  return activeTask;
-};
+import {
+  hydrateTaskSubtasks,
+  syncTaskInCollection,
+  syncActiveTask,
+  applyTaskUpdate,
+  applyTaskRemoval,
+} from "./taskStoreHelpers";
 
 interface TaskState {
   tasks: Task[];
@@ -231,6 +94,8 @@ interface TaskState {
   addComment: (taskId: string, authorId: string, content: string) => Promise<void>;
   resetToDefault: () => Promise<void>;
 }
+
+let fetchTasksPromise: Promise<void> | null = null;
 
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
@@ -380,69 +245,77 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   fetchTasks: async () => {
-    const currentState = get();
-    if (currentState.isLoading) return;
-
-    set({ isLoading: true, error: null });
-
-    if (currentState.projects.length === 0) {
-      await get().fetchProjects();
+    if (fetchTasksPromise) {
+      return fetchTasksPromise;
     }
 
-    let activeProjectId = get().filters.projectId;
-    if (get().viewMode === "kanban" && (!activeProjectId || activeProjectId === "ALL") && get().projects.length > 0) {
-      activeProjectId = get().projects[0].id;
-      set({ filters: { ...get().filters, projectId: activeProjectId } });
-    }
+    fetchTasksPromise = (async () => {
+      const currentState = get();
+      set({ isLoading: true, error: null });
 
-    await get().fetchStatuses(
-      activeProjectId && activeProjectId !== "ALL" ? activeProjectId : undefined,
-      get().filters.departmentId && get().filters.departmentId !== "ALL" ? get().filters.departmentId : undefined
-    );
-
-    try {
-      const state = get();
-      const baseFilters = state.filters;
-
-      if (state.viewMode === "kanban") {
-        const { tasks, cursors, hasMore } = await taskService.getKanbanTasks({
-          ...baseFilters,
-          perPage: 10,
-        });
-
-        const currentActive = get().activeTask;
-        let refreshedActive = currentActive;
-        if (currentActive) {
-          const found = tasks.find((t) => t.id === currentActive.id);
-          if (found) {
-            refreshedActive = hydrateTaskSubtasks(found, tasks, get().statuses);
-          }
-        }
-
-        set({ tasks, cursors, hasMore, activeTask: refreshedActive, isLoading: false });
-      } else {
-        const { tasks, meta } = await taskService.getTasks({ ...baseFilters, perPage: 10 });
-        const currentActive = get().activeTask;
-        let refreshedActive = currentActive;
-        if (currentActive) {
-          const found = tasks.find((t) => t.id === currentActive.id);
-          if (found) {
-            refreshedActive = hydrateTaskSubtasks(found, tasks, get().statuses);
-          }
-        }
-
-        set({
-          tasks,
-          activeTask: refreshedActive,
-          cursors: { ALL: meta?.next_cursor || null },
-          hasMore: { ALL: meta?.has_more ?? false },
-          isLoading: false
-        });
+      if (currentState.projects.length === 0) {
+        await get().fetchProjects();
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Có lỗi xảy ra khi tải dữ liệu công việc";
-      set({ error: message, isLoading: false });
-    }
+
+      let activeProjectId = get().filters.projectId;
+      if (get().viewMode === "kanban" && (!activeProjectId || activeProjectId === "ALL") && get().projects.length > 0) {
+        activeProjectId = get().projects[0].id;
+        set({ filters: { ...get().filters, projectId: activeProjectId } });
+      }
+
+      await get().fetchStatuses(
+        activeProjectId && activeProjectId !== "ALL" ? activeProjectId : undefined,
+        get().filters.departmentId && get().filters.departmentId !== "ALL" ? get().filters.departmentId : undefined
+      );
+
+      try {
+        const state = get();
+        const baseFilters = state.filters;
+
+        if (state.viewMode === "kanban") {
+          const { tasks, cursors, hasMore } = await taskService.getKanbanTasks({
+            ...baseFilters,
+            perPage: 10,
+          });
+
+          const currentActive = get().activeTask;
+          let refreshedActive = currentActive;
+          if (currentActive) {
+            const found = tasks.find((t) => t.id === currentActive.id);
+            if (found) {
+              refreshedActive = hydrateTaskSubtasks(found, tasks, get().statuses);
+            }
+          }
+
+          set({ tasks, cursors, hasMore, activeTask: refreshedActive, isLoading: false });
+        } else {
+          const { tasks, meta } = await taskService.getTasks({ ...baseFilters, perPage: 10 });
+          const currentActive = get().activeTask;
+          let refreshedActive = currentActive;
+          if (currentActive) {
+            const found = tasks.find((t) => t.id === currentActive.id);
+            if (found) {
+              refreshedActive = hydrateTaskSubtasks(found, tasks, get().statuses);
+            }
+          }
+
+          set({
+            tasks,
+            activeTask: refreshedActive,
+            cursors: { ALL: meta?.next_cursor || null },
+            hasMore: { ALL: meta?.has_more ?? false },
+            isLoading: false,
+          });
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Có lỗi xảy ra khi tải dữ liệu công việc";
+        set({ error: message, isLoading: false });
+      } finally {
+        fetchTasksPromise = null;
+      }
+    })();
+
+    return fetchTasksPromise;
   },
 
   fetchMoreTasks: async (statusColumn?: TaskStatus) => {
@@ -593,18 +466,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       updatedAt: nowIso,
     };
 
-    set((state) => ({
-      tasks: syncTaskInCollection(state.tasks, updatedTaskObj, state.statuses),
-      activeTask: syncActiveTask(state.activeTask, updatedTaskObj, state.statuses),
-    }));
+    set((state) => applyTaskUpdate(state, updatedTaskObj));
 
     try {
       const serverUpdated = await taskService.updateTaskStatus(taskId, targetStatus, targetResolution);
       if (serverUpdated) {
-        set((state) => ({
-          tasks: syncTaskInCollection(state.tasks, serverUpdated, state.statuses),
-          activeTask: syncActiveTask(state.activeTask, serverUpdated, state.statuses),
-        }));
+        set((state) => applyTaskUpdate(state, serverUpdated));
       }
       return { success: true };
     } catch {
@@ -614,10 +481,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         resolution: previousResolution,
         closedAt: previousClosedAt,
       };
-      set((state) => ({
-        tasks: syncTaskInCollection(state.tasks, rolledBackObj, state.statuses),
-        activeTask: syncActiveTask(state.activeTask, rolledBackObj, state.statuses),
-      }));
+      set((state) => applyTaskUpdate(state, rolledBackObj));
       return {
         success: false,
         reason: "Lỗi kết nối khi cập nhật trạng thái. Đã khôi phục trạng thái ban đầu.",
@@ -646,10 +510,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     try {
       const updated = await taskService.closeTask(taskId, resolution, note, currentUser?.id, cancelStatus);
-      set((state) => ({
-        tasks: syncTaskInCollection(state.tasks, updated, state.statuses),
-        activeTask: syncActiveTask(state.activeTask, updated, state.statuses),
-      }));
+      set((state) => applyTaskUpdate(state, updated));
       return { success: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Lỗi khi đóng công việc";
@@ -674,10 +535,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     try {
       const updated = await taskService.reopenTask(taskId, todoStatus);
-      set((state) => ({
-        tasks: syncTaskInCollection(state.tasks, updated, state.statuses),
-        activeTask: syncActiveTask(state.activeTask, updated, state.statuses),
-      }));
+      set((state) => applyTaskUpdate(state, updated));
       return { success: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Lỗi khi mở lại công việc";
@@ -695,21 +553,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   updateTask: async (id, updates) => {
     const updated = await taskService.updateTask(id, updates);
-    set((state) => ({
-      tasks: syncTaskInCollection(state.tasks, updated, state.statuses),
-      activeTask: syncActiveTask(state.activeTask, updated, state.statuses),
-    }));
+    set((state) => applyTaskUpdate(state, updated));
     return updated;
   },
 
   deleteTask: async (id) => {
     const success = await taskService.deleteTask(id);
     if (success) {
-      set((state) => ({
-        tasks: removeTaskFromCollection(state.tasks, id, state.statuses),
-        activeTask: removeTaskFromActive(state.activeTask, id, state.statuses),
-        isDetailOpen: state.activeTask?.id === id ? false : state.isDetailOpen,
-      }));
+      set((state) => applyTaskRemoval(state, id));
     }
     return success;
   },
@@ -743,10 +594,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         ? state.tasks
         : [...state.tasks, newSubtask];
 
-      return {
-        tasks: syncTaskInCollection(tasksWithSub, newSubtask, state.statuses),
-        activeTask: syncActiveTask(state.activeTask, newSubtask, state.statuses),
-      };
+      return applyTaskUpdate({ ...state, tasks: tasksWithSub }, newSubtask);
     });
 
     return newSubtask;

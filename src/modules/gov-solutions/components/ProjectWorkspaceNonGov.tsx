@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Building2,
   Handshake,
@@ -41,7 +41,7 @@ interface ProjectWorkspaceNonGovProps {
 }
 
 export function ProjectWorkspaceNonGov({ onOpenCreateMeeting }: ProjectWorkspaceNonGovProps) {
-  const { getActiveSolution, meetings, documents, deleteDocument } = useGovStore();
+  const { getActiveSolution, meetings, documents, deleteDocument, fetchProjectDocuments } = useGovStore();
   const { tasks, isCreateOpen, openWorkflowConfig, openDetail } = useTaskStore();
   const { users } = useUserStore();
 
@@ -49,6 +49,12 @@ export function ProjectWorkspaceNonGov({ onOpenCreateMeeting }: ProjectWorkspace
   const [isDocDialogOpen, setIsDocDialogOpen] = useState(false);
 
   const solution = getActiveSolution();
+
+  useEffect(() => {
+    if (solution.id) {
+      fetchProjectDocuments(solution.id);
+    }
+  }, [solution.id, fetchProjectDocuments]);
   const isInternal = solution.category === "INTERNAL";
   const isOutsource = solution.category === "OUTSOURCE";
 

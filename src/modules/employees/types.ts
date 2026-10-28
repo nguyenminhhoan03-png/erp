@@ -13,10 +13,13 @@ export interface Employee {
   email: string;
   phone: string;
   avatar: string;
+  avatarFile?: File;
   departmentId: string;
   departmentName?: string;
   position: string;
   role: string;
+  roleId?: string;
+  roleName?: string;
   userType: UserType;
   status: EmployeeStatus;
   joinedDate: string;
@@ -24,12 +27,26 @@ export interface Employee {
   cccd?: string;
   salary?: number;
   bankAccount?: {
+    bankId?: string;
     bankName: string;
     accountNumber: string;
     holderName: string;
     branch?: string;
   };
   address?: string;
+  provinceId?: string;
+  provinceName?: string;
+  districtId?: string;
+  districtName?: string;
+  wardId?: string;
+  wardName?: string;
+  contract?: string;
+  contractSignedDate?: string;
+  contractEndDate?: string;
+  signature?: string;
+  attendanceMachineId?: string;
+  hasSubmittedDocuments?: boolean;
+  password?: string;
 }
 
 export interface EmployeeFilter {

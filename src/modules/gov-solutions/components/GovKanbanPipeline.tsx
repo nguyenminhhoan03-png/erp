@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Calendar,
   FileText,
@@ -29,11 +30,12 @@ const PIPELINE_COLUMNS: GovStage[] = [
 ];
 
 export function GovKanbanPipeline() {
+  const router = useRouter();
   const { projects, filters, setSelectedProject, updateProjectStage, activeSolutionId } = useGovStore();
 
   const filteredProjects = React.useMemo(() => {
     return projects.filter((p) => {
-      if (activeSolutionId && p.solutionId !== activeSolutionId) return false;
+      if (activeSolutionId && p.solutionId !== activeSolutionId && p.projectId !== activeSolutionId) return false;
 
       if (filters.search && filters.search.trim()) {
         const q = filters.search.toLowerCase().trim();
@@ -83,7 +85,7 @@ export function GovKanbanPipeline() {
                 stageProjects.map((project) => (
                   <div
                     key={project.id}
-                    onClick={() => setSelectedProject(project)}
+                    onClick={() => router.push(`/projects/${project.id}`)}
                     className="p-3 rounded-xl bg-background/90 border border-border/70 hover:border-primary/50 shadow-2xs hover:shadow-xs transition-all cursor-pointer group space-y-2.5"
                   >
                     <div className="flex items-start justify-between gap-1.5">

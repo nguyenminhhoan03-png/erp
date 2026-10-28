@@ -6,7 +6,7 @@ import { useUserStore } from "../store/useUserStore";
 import { can, hasPermission, PermissionContext } from "./can";
 
 interface PermissionGuardProps {
-  permission: PermissionKey;
+  permission: PermissionKey | string;
   context?: PermissionContext;
   children: React.ReactNode;
   fallback?: React.ReactNode;
@@ -30,7 +30,7 @@ export function PermissionGuard({
 }
 
 export function usePermission(
-  permission: PermissionKey,
+  permission: PermissionKey | string,
   context?: PermissionContext
 ): boolean {
   const { currentUser } = useUserStore();

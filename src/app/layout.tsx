@@ -26,9 +26,9 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full w-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="min-h-full w-full flex flex-col bg-background text-foreground">
         {children}
         <Toaster position="top-right" richColors closeButton expand={false} />
       </body>

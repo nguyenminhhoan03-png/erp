@@ -59,5 +59,6 @@ export function toStoreUser(user: AuthUser): User {
     title: user.title || user.roleName || "Thành viên",
     phone: user.phone ?? undefined,
     isSuperAdmin: user.isSuperAdmin,
+    permissions: user.permissions || [],
   };
 }

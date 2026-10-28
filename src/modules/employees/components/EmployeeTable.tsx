@@ -11,6 +11,10 @@ import {
   Calendar,
   ShieldCheck,
   User,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  RefreshCw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -19,11 +23,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
+import { useRouter } from "next/navigation";
 import { Button } from "@/shared/components/ui/button";
-import { Badge } from "@/shared/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { useEmployeeStore } from "../store/employeeStore";
-import { Employee, UserType } from "../types";
+import { UserType } from "../types";
 
 const USER_TYPE_LABELS: Record<UserType, { label: string; className: string }> = {
   nhan_vien_chinh_thuc: {
@@ -53,39 +64,20 @@ const DEPARTMENT_BADGE_COLORS: Record<string, string> = {
 };
 
 export function EmployeeTable() {
+  const router = useRouter();
   const {
     employees,
-    filter,
-    openDetail,
-    openEdit,
+    isLoading,
+    pagination,
+    setPerPage,
+    nextPage,
+    prevPage,
+    goToFirstPage,
     deleteEmployee,
     toggleStatus,
   } = useEmployeeStore();
 
-  const filtered = React.useMemo(() => {
-    return employees.filter((e) => {
-      if (filter.search) {
-        const q = filter.search.toLowerCase().trim();
-        const matchName = e.name.toLowerCase().includes(q);
-        const matchCode = e.code.toLowerCase().includes(q);
-        const matchEmail = e.email.toLowerCase().includes(q);
-        const matchPhone = e.phone.toLowerCase().includes(q);
-        if (!matchName && !matchCode && !matchEmail && !matchPhone) return false;
-      }
-      if (filter.departmentId !== "ALL" && e.departmentId !== filter.departmentId) {
-        return false;
-      }
-      if (filter.userType !== "ALL" && e.userType !== filter.userType) {
-        return false;
-      }
-      if (filter.status !== "ALL" && e.status !== filter.status) {
-        return false;
-      }
-      return true;
-    });
-  }, [employees, filter]);
-
-  if (filtered.length === 0) {
+  if (!isLoading && employees.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 rounded-2xl border border-dashed border-border/80 bg-card/40 text-center">
         <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
@@ -103,7 +95,15 @@ export function EmployeeTable() {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/70 backdrop-blur-sm shadow-xs">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] flex items-center justify-center z-10">
+            <div className="flex items-center gap-2 bg-card px-4 py-2 rounded-xl border border-border/80 shadow-md">
+              <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-xs text-muted-foreground font-medium">Đang tải dữ liệu...</span>
+            </div>
+          </div>
+        )}
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-border/80 bg-muted/40 text-muted-foreground font-medium">
@@ -117,7 +117,7 @@ export function EmployeeTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
-            {filtered.map((emp) => {
+            {employees.map((emp) => {
               const typeCfg =
                 USER_TYPE_LABELS[emp.userType] || USER_TYPE_LABELS.nhan_vien_chinh_thuc;
               const deptColor =
@@ -128,7 +128,7 @@ export function EmployeeTable() {
                 <tr
                   key={emp.id}
                   className="group hover:bg-muted/40 transition-colors cursor-pointer"
-                  onClick={() => openDetail(emp)}
+                  onClick={() => router.push(`/employees/${emp.id}`)}
                 >
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">
@@ -254,14 +254,14 @@ export function EmployeeTable() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44 text-xs">
                         <DropdownMenuItem
-                          onClick={() => openDetail(emp)}
+                          onClick={() => router.push(`/employees/${emp.id}`)}
                           className="gap-2 cursor-pointer"
                         >
                           <Eye className="h-3.5 w-3.5 text-blue-500" />
                           <span>Xem hồ sơ chi tiết</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => openEdit(emp)}
+                          onClick={() => router.push(`/employees/${emp.id}/edit`)}
                           className="gap-2 cursor-pointer"
                         >
                           <Edit className="h-3.5 w-3.5 text-amber-500" />
@@ -299,9 +299,73 @@ export function EmployeeTable() {
           </tbody>
         </table>
       </div>
-      <div className="py-2.5 px-4 border-t border-border/70 bg-muted/20 flex items-center justify-between text-xs text-muted-foreground">
-        <span>Hiển thị {filtered.length} nhân sự</span>
-        <span>Phân hệ Quản lý Nhân sự ERP</span>
+
+      <div className="py-3 px-4 border-t border-border/70 bg-card/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3 text-muted-foreground flex-wrap">
+          <span>
+            Hiển thị <span className="font-semibold text-foreground">{employees.length}</span> / tổng số{" "}
+            <span className="font-semibold text-foreground">{pagination.total}</span> nhân sự
+          </span>
+          <span className="hidden sm:inline-block text-border">|</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Số lượng:</span>
+            <div className="w-20">
+              <Select
+                value={String(pagination.perPage)}
+                onValueChange={(val) => setPerPage(Number(val))}
+              >
+                <SelectTrigger className="h-7 text-xs rounded-lg bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10" className="text-xs">10</SelectItem>
+                  <SelectItem value="20" className="text-xs">20</SelectItem>
+                  <SelectItem value="50" className="text-xs">50</SelectItem>
+                  <SelectItem value="100" className="text-xs">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground mr-1">
+            Trang <span className="text-foreground font-semibold">{pagination.page}</span>
+          </span>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToFirstPage}
+            disabled={pagination.page <= 1 || isLoading}
+            className="h-8 px-2.5 rounded-xl text-xs gap-1 hover:bg-muted"
+          >
+            <ChevronsLeft className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Trang đầu</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={prevPage}
+            disabled={pagination.page <= 1 || isLoading}
+            className="h-8 px-3 rounded-xl text-xs gap-1 hover:bg-muted"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            <span>Trước</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={nextPage}
+            disabled={!pagination.hasMore || isLoading}
+            className="h-8 px-3 rounded-xl text-xs gap-1 hover:bg-muted"
+          >
+            <span>Sau</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -43,6 +43,7 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
     reorderStatuses,
     syncStatuses,
     filters,
+    isLoading,
   } = useTaskStore();
   const { currentUser } = useUserStore();
   const [activeTask, setActiveTask] = React.useState<Task | null>(null);
@@ -61,6 +62,19 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
   );
 
   const isStatusFiltered = Boolean(filters.status && filters.status !== "ALL");
+  const isProjectSelected = Boolean(filters.projectId && filters.projectId !== "ALL");
+
+  const hasProjectStatus = React.useMemo(() => {
+    if (!isProjectSelected) return true;
+    return Boolean(
+      statuses?.some(
+        (s) =>
+          (s.projectId && String(s.projectId) === String(filters.projectId)) ||
+          (s.govProjectId && `gov_${s.govProjectId}` === String(filters.projectId))
+      )
+    );
+  }, [isProjectSelected, filters.projectId, statuses]);
+
 
   const activeColumns = React.useMemo(() => {
     if (statuses && statuses.length > 0) {
@@ -77,20 +91,34 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
     return activeColumns.map((c) => c.key);
   }, [activeColumns]);
 
+  const activeColumnKeySet = React.useMemo(() => {
+    return new Set(activeColumnKeys);
+  }, [activeColumnKeys]);
+
   const tasksByColumn = React.useMemo(() => {
     const grouped: Record<string, Task[]> = {};
-    activeColumns.forEach((col) => (grouped[col.key] = []));
+    for (const col of activeColumns) {
+      grouped[col.key] = [];
+    }
 
-    tasks.forEach((task) => {
+    // Build status key mapping for fast O(1) resolution
+    const statusKeyMap = new Map<string, string>();
+    if (statuses) {
+      for (const s of statuses) {
+        statusKeyMap.set(s.key, s.key);
+      }
+    }
+
+    for (const task of tasks) {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        const statusDef = statuses?.find((s) => s.key === task.status);
-        if (statusDef && grouped[statusDef.key]) {
-          grouped[statusDef.key].push(task);
+        const resolvedKey = statusKeyMap.get(task.status);
+        if (resolvedKey && grouped[resolvedKey]) {
+          grouped[resolvedKey].push(task);
         }
       }
-    });
+    }
     return grouped;
   }, [tasks, activeColumns, statuses]);
 
@@ -113,7 +141,7 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
 
     let targetStatus: TaskStatus | null = null;
 
-    if (activeColumnKeys.includes(overId as TaskStatus)) {
+    if (activeColumnKeySet.has(overId as TaskStatus)) {
       targetStatus = overId as TaskStatus;
     } else {
       const overTask = tasks.find((t) => t.id === overId);
@@ -206,7 +234,11 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
     }
   };
 
-  if (!statuses || statuses.length === 0) {
+  if (isLoading) {
+    return null;
+  }
+
+  if (!statuses || statuses.length === 0 || !hasProjectStatus) {
     return (
       <>
         <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-border/80 rounded-2xl bg-card/40 my-8 max-w-xl mx-auto shadow-xs">
@@ -217,7 +249,7 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
             Dự án chưa được cấu hình cột trạng thái
           </h3>
           <p className="text-xs text-muted-foreground mt-2 max-w-md leading-relaxed">
-            Bảng Kanban yêu cầu dự án phải thiết lập quy trình các cột trạng thái (ví dụ: Cần làm, Đang làm, Hoàn thành...) trước khi có thể hiển thị và quản lý công việc.
+            Dự án này chưa được thiết lập quy trình các cột Kanban riêng. Vui lòng thiết lập quy trình để bắt đầu quản lý công việc trên bảng Kanban.
           </p>
           <div className="mt-5 flex items-center gap-3">
             <Button

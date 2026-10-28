@@ -12,8 +12,6 @@ export interface ProjectCategoryItem {
   createdAt?: string;
 }
 
-const STORAGE_KEY = "igb_project_categories";
-
 export const DEFAULT_PROJECT_CATEGORIES: ProjectCategoryItem[] = [
   {
     id: "1",
@@ -78,30 +76,12 @@ export const useProjectCategoryStore = create<ProjectCategoryStore>((set, get) =
       if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
         const mapped = res.data.map(mapApiToItem).filter((c) => c.isSystem !== false);
         set({ categories: mapped, isLoading: false });
-        if (typeof window !== "undefined") {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped));
-        }
         return;
       }
     } catch {
-      // Fallback to local storage or presets
+      // Fallback to presets if network fails
     }
 
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const systemOnly = parsed.filter((c: any) => c.isSystem !== false);
-            set({ categories: systemOnly.length > 0 ? systemOnly : DEFAULT_PROJECT_CATEGORIES, isLoading: false });
-            return;
-          }
-        } catch {
-          // ignore error
-        }
-      }
-    }
     set({ categories: DEFAULT_PROJECT_CATEGORIES, isLoading: false });
   },
 
@@ -127,26 +107,10 @@ export const useProjectCategoryStore = create<ProjectCategoryStore>((set, get) =
             createdAt: new Date().toISOString().split("T")[0],
           };
 
-      const updated = [...get().categories, newCategory];
-      set({ categories: updated });
-      if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      }
+      set({ categories: [...get().categories, newCategory] });
       return true;
     } catch {
-      const newCategory: ProjectCategoryItem = {
-        ...item,
-        id: `cat_${Date.now()}`,
-        projectCount: 0,
-        sortOrder: get().categories.length + 1,
-        createdAt: new Date().toISOString().split("T")[0],
-      };
-      const updated = [...get().categories, newCategory];
-      set({ categories: updated });
-      if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      }
-      return true;
+      return false;
     }
   },
 
@@ -161,16 +125,12 @@ export const useProjectCategoryStore = create<ProjectCategoryStore>((set, get) =
           sort_order: item.sortOrder,
         },
       });
+      const updated = get().categories.map((cat) => (cat.id === id ? { ...cat, ...item } : cat));
+      set({ categories: updated });
+      return true;
     } catch {
-      // Continue optimistic local update
+      return false;
     }
-
-    const updated = get().categories.map((cat) => (cat.id === id ? { ...cat, ...item } : cat));
-    set({ categories: updated });
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    }
-    return true;
   },
 
   deleteCategory: async (id) => {
@@ -178,15 +138,11 @@ export const useProjectCategoryStore = create<ProjectCategoryStore>((set, get) =
       await apiRequest(`/erp/gov-projects/project-categories/${id}`, {
         method: "DELETE",
       });
+      const updated = get().categories.filter((cat) => cat.id !== id);
+      set({ categories: updated });
+      return true;
     } catch {
-      // Continue optimistic local deletion
+      return false;
     }
-
-    const updated = get().categories.filter((cat) => cat.id !== id);
-    set({ categories: updated });
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    }
-    return true;
   },
 }));

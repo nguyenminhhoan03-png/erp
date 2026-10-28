@@ -20,9 +20,19 @@ import { useUserStore } from "@/shared/store/useUserStore";
 import { UserType, EmployeeStatus } from "../types";
 
 export function EmployeeFormDialog() {
-  const { isFormOpen, editingEmployee, closeForm, addEmployee, updateEmployee } =
+  const { isFormOpen, editingEmployee, closeForm, addEmployee, updateEmployee, options, loadOptions } =
     useEmployeeStore();
   const departments = useUserStore((s) => s.departments);
+
+  React.useEffect(() => {
+    if (isFormOpen && !options) {
+      loadOptions();
+    }
+  }, [isFormOpen, options, loadOptions]);
+
+  const deptList: Array<{ id: string; name: string }> = (options?.departments && options.departments.length > 0)
+    ? options.departments.map((d) => ({ id: String(d.id), name: d.name }))
+    : departments;
 
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -203,23 +213,11 @@ export function EmployeeFormDialog() {
                     <SelectValue placeholder="Chọn phòng ban" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="it">Công nghệ thông tin</SelectItem>
-                    <SelectItem value="hr">Nhân sự & Tuyển dụng</SelectItem>
-                    <SelectItem value="marketing">Marketing & Truyền thông</SelectItem>
-                    <SelectItem value="sales">Kinh doanh</SelectItem>
-                    <SelectItem value="accounting">Kế toán & Tài chính</SelectItem>
-                    {departments
-                      .filter(
-                        (d) =>
-                          !["it", "hr", "marketing", "sales", "accounting"].includes(
-                            d.id
-                          )
-                      )
-                      .map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.name}
-                        </SelectItem>
-                      ))}
+                    {deptList.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

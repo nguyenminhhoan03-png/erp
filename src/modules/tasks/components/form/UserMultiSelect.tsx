@@ -23,6 +23,7 @@ export interface UserMultiSelectProps {
   onChange: (ids: string[]) => void;
   currentUser: User;
   selfActionLabel?: string;
+  showSelfAction?: boolean;
   placeholder?: string;
   helpText?: string;
   disabled?: boolean;
@@ -38,6 +39,7 @@ export function UserMultiSelect({
   onChange,
   currentUser,
   selfActionLabel = "Gán cho tôi",
+  showSelfAction = true,
   placeholder = "Chọn người...",
   helpText,
   disabled,
@@ -107,7 +109,7 @@ export function UserMultiSelect({
         </div>
 
         <div className="flex items-center gap-2">
-          {!disabled && (
+          {!disabled && showSelfAction && (
             <button
               type="button"
               onClick={handleToggleSelf}

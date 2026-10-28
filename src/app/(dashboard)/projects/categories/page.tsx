@@ -138,7 +138,7 @@ export default function ProjectCategoriesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/gov-projects">
+          <Link href="/projects">
             <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8.5 font-medium cursor-pointer shadow-2xs">
               <Compass className="h-4 w-4" />
               <span>Xem Danh sách dự án</span>

@@ -21,6 +21,7 @@ export interface CustomTaskStatus {
   isDefault?: boolean;
   isSystem?: boolean;
   projectId?: string | null;
+  govProjectId?: string | null;
   departmentId?: string | null;
 }
 

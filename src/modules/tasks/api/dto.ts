@@ -130,3 +130,72 @@ export interface TaskCommentSingleDto {
   success?: boolean;
   data: TaskCommentDto;
 }
+
+export interface DailyReportUserDto {
+  id: string;
+  name?: string;
+  email?: string;
+  avatar?: string;
+  position?: string;
+  department?: string;
+}
+
+export interface DailyReportFeedbackDto {
+  id: string;
+  feedbackContent: string;
+  feedbackType?: string;
+  createdAt?: string;
+  author?: DailyReportUserDto | null;
+}
+
+export interface DailyReportContentDto {
+  todayWorks?: Array<{
+    id: string;
+    taskId?: string;
+    taskTitle: string;
+    hoursSpent: number;
+    status: string;
+    note?: string;
+  }>;
+  tomorrowPlans?: string;
+  blockers?: string;
+}
+
+export interface DailyReportDto {
+  id: string;
+  userId?: string;
+  type?: string;
+  reportDate?: string;
+  reportStatus?: string;
+  submittedAt?: string | null;
+  content?: DailyReportContentDto | string;
+  attachments?: string[];
+  user?: DailyReportUserDto | null;
+  approver?: DailyReportUserDto | null;
+  ccRecipients?: DailyReportUserDto[];
+  feedbacks?: DailyReportFeedbackDto[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DailyReportCollectionDto {
+  success?: boolean;
+  message?: string;
+  data: DailyReportDto[];
+  meta?: {
+    per_page?: number;
+    next_cursor?: string | null;
+    prev_cursor?: string | null;
+    has_more?: boolean;
+    current_page?: number;
+    last_page?: number;
+    total?: number;
+  };
+}
+
+export interface DailyReportSingleDto {
+  success?: boolean;
+  message?: string;
+  data: DailyReportDto;
+}
+

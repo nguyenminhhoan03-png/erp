@@ -19,7 +19,7 @@ export function GovStatsHeader({ onOpenCreateMeeting }: GovStatsHeaderProps) {
   const { projects, activeSolutionId } = useGovStore();
 
   const activeProjects = React.useMemo(() => {
-    return projects.filter((p) => !activeSolutionId || p.solutionId === activeSolutionId);
+    return projects.filter((p) => !activeSolutionId || p.solutionId === activeSolutionId || p.projectId === activeSolutionId);
   }, [projects, activeSolutionId]);
 
   const totalProvinces = activeProjects.length;

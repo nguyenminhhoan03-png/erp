@@ -57,25 +57,40 @@ function TasksPageContent() {
   const searchParams = useSearchParams();
   const urlProjectId = searchParams.get("projectId");
 
+  const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+
   React.useEffect(() => {
-    if (urlProjectId) {
-      setFilters({ projectId: urlProjectId });
-    } else {
-      fetchTasks();
-    }
+    let isMounted = true;
+    const load = async () => {
+      try {
+        if (urlProjectId) {
+          await setFilters({ projectId: urlProjectId });
+        } else {
+          await fetchTasks();
+        }
+      } finally {
+        if (isMounted) {
+          setIsInitialLoad(false);
+        }
+      }
+    };
+    load();
+    return () => {
+      isMounted = false;
+    };
   }, [urlProjectId, fetchTasks, setFilters]);
-
-
 
   const handleTaskClick = (task: Task) => {
     openDetail(task);
   };
 
+  const showLoading = isLoading || isInitialLoad;
+
   return (
     <div className="flex flex-col h-full space-y-4">
       <TaskFilters />
 
-      {isLoading && (
+      {showLoading && (
         <div className="flex gap-4 overflow-x-auto pb-4 pt-1">
           {Array.from({ length: 5 }).map((_, colIdx) => (
             <div
@@ -94,7 +109,7 @@ function TasksPageContent() {
         </div>
       )}
 
-      {!isLoading && error && (
+      {!showLoading && error && (
         <div className="flex flex-col items-center justify-center p-10 rounded-2xl border border-rose-300 bg-rose-50/50 dark:bg-rose-950/20 text-center my-6">
           <AlertCircle className="h-10 w-10 text-rose-500 mb-3" />
           <h3 className="text-base font-semibold text-rose-800 dark:text-rose-200">
@@ -115,7 +130,7 @@ function TasksPageContent() {
         </div>
       )}
 
-      {!isLoading && !error && viewMode === "kanban" && (
+      {!showLoading && !error && viewMode === "kanban" && (
         <KanbanBoard
           onTaskClick={handleTaskClick}
           onAddTask={(colStatus) =>
@@ -124,7 +139,7 @@ function TasksPageContent() {
         />
       )}
 
-      {!isLoading && !error && viewMode === "list" && tasks.length === 0 && (
+      {!showLoading && !error && viewMode === "list" && tasks.length === 0 && (
         <EmptyState
           title={
             filters.search || filters.departmentId !== "ALL"
@@ -149,7 +164,7 @@ function TasksPageContent() {
         />
       )}
 
-      {!isLoading && !error && viewMode === "list" && tasks.length > 0 && (
+      {!showLoading && !error && viewMode === "list" && tasks.length > 0 && (
         <div className="space-y-4 pb-6">
           <TaskListView tasks={tasks} onTaskClick={handleTaskClick} />
           {hasMore["ALL"] && (

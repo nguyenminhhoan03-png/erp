@@ -3,10 +3,11 @@ export type DepartmentId = "it" | "marketing" | "hr" | "sales" | "accounting" | 
 export interface Department {
   id: DepartmentId;
   name: string;
-  code: string;
-  color: string;
-  description: string;
+  code?: string;
+  color?: string;
+  description?: string;
   managerId?: string;
+  employeesCount?: number;
 }
 
 export type SystemRole = "ADMIN" | "MANAGER" | "EMPLOYEE";

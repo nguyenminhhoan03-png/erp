@@ -52,16 +52,6 @@ export function Header() {
     <header className="h-16 border-b border-border/70 bg-background/85 backdrop-blur-md sticky top-0 z-20 px-3 sm:px-6 flex items-center justify-between gap-4">
       {/* Left side: Sidebar Toggle & Context Breadcrumb */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleSidebar}
-          title="Đóng / mở menu (Ctrl+B)"
-          aria-label="Đóng mở menu"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0 rounded-lg cursor-pointer"
-        >
-          <PanelLeft className="h-4 w-4" />
-        </Button>
 
         {/* Workspace pill / breadcrumb */}
         <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted/60 transition-colors shrink-0">

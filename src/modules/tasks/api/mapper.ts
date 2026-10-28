@@ -8,6 +8,11 @@ import {
   TaskPriority,
   TaskResolution,
   TaskStatus,
+  DailyReport,
+  DailyReportItem,
+  DailyReportStatus,
+  DailyReportType,
+  ReportFeedback,
 } from "../types";
 import type {
   TaskAttachmentDto,
@@ -16,6 +21,7 @@ import type {
   TaskCommentDto,
   TaskDto,
   TaskUserDto,
+  DailyReportDto,
 } from "./dto";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -167,3 +173,155 @@ export const mapTaskCollectionResponse = (
 
   return { tasks, meta };
 };
+
+const cleanLegacyHtml = (raw: string): string => {
+  if (!raw) return "";
+  return raw
+    .replace(/<br\s*[\/]?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .trim();
+};
+
+export const mapDailyReportDtoToEntity = (dto: DailyReportDto): DailyReport => {
+  let todayWorks: DailyReportItem[] = [];
+  let tomorrowPlans = "";
+  let blockers = "";
+
+  if (dto.content && typeof dto.content === "object") {
+    todayWorks = Array.isArray(dto.content.todayWorks)
+      ? dto.content.todayWorks.map((item) => ({
+          id: item.id || `work-${Math.random()}`,
+          taskId: item.taskId,
+          taskTitle: item.taskTitle || "",
+          hoursSpent: Number(item.hoursSpent) || 0,
+          status: (item.status || "IN_PROGRESS") as any,
+          note: item.note,
+        }))
+      : [];
+    tomorrowPlans = cleanLegacyHtml(dto.content.tomorrowPlans || "");
+    blockers = cleanLegacyHtml(dto.content.blockers || "");
+  } else if (typeof dto.content === "string") {
+    try {
+      const parsed = JSON.parse(dto.content);
+      if (parsed && typeof parsed === "object") {
+        todayWorks = Array.isArray(parsed.todayWorks)
+          ? parsed.todayWorks.map((item: any) => ({
+              id: item.id || `work-${Math.random()}`,
+              taskId: item.taskId,
+              taskTitle: item.taskTitle || "",
+              hoursSpent: Number(item.hoursSpent) || 0,
+              status: (item.status || "IN_PROGRESS") as any,
+              note: item.note,
+            }))
+          : [];
+        tomorrowPlans = cleanLegacyHtml(parsed.tomorrowPlans || "");
+        blockers = cleanLegacyHtml(parsed.blockers || "");
+      } else {
+        tomorrowPlans = cleanLegacyHtml(dto.content);
+      }
+    } catch {
+      tomorrowPlans = cleanLegacyHtml(dto.content);
+    }
+  }
+
+  const user: User | undefined = dto.user
+    ? {
+        id: String(dto.user.id),
+        name: dto.user.name || "",
+        email: dto.user.email || "",
+        avatar: dto.user.avatar || "",
+        role: "STAFF",
+        departmentId: (dto.user.department || "") as DepartmentId,
+        title: dto.user.position || "",
+      }
+    : undefined;
+
+  const approver: User | undefined = dto.approver
+    ? {
+        id: String(dto.approver.id),
+        name: dto.approver.name || "",
+        email: dto.approver.email || "",
+        avatar: dto.approver.avatar || "",
+        role: "MANAGER",
+        departmentId: (dto.approver.department || "") as DepartmentId,
+        title: dto.approver.position || "",
+      }
+    : undefined;
+
+  const ccRecipients: User[] = (dto.ccRecipients || []).map((c) => ({
+    id: String(c.id),
+    name: c.name || "",
+    email: c.email || "",
+    avatar: c.avatar || "",
+    role: "STAFF",
+    departmentId: (c.department || "") as DepartmentId,
+    title: c.position || "",
+  }));
+
+  const feedbacks: ReportFeedback[] = (dto.feedbacks || []).map((fb) => ({
+    id: String(fb.id),
+    dailyReportId: String(dto.id),
+    feedbackBy: fb.author?.id ? String(fb.author.id) : "",
+    feedbackContent: fb.feedbackContent || "",
+    createdAt: fb.createdAt || "",
+    user: fb.author
+      ? {
+          id: String(fb.author.id),
+          name: fb.author.name || "",
+          email: fb.author.email || "",
+          avatar: fb.author.avatar || "",
+          role: "MANAGER",
+          departmentId: (fb.author.department || "") as DepartmentId,
+          title: fb.author.position || "",
+        }
+      : undefined,
+  }));
+
+    let attachments: string[] = [];
+    if (Array.isArray(dto.attachments)) {
+      attachments = dto.attachments
+        .map((item: any) => (typeof item === "string" ? item : item?.url || item?.path || item?.name || ""))
+        .filter(Boolean);
+    } else if (typeof dto.attachments === "string" && (dto.attachments as string).trim()) {
+      try {
+        const parsed = JSON.parse(dto.attachments);
+        if (Array.isArray(parsed)) {
+          attachments = parsed
+            .map((item: any) => (typeof item === "string" ? item : item?.url || item?.path || item?.name || ""))
+            .filter(Boolean);
+        } else {
+          attachments = [(dto.attachments as string).trim()];
+        }
+      } catch {
+        attachments = [(dto.attachments as string).trim()];
+      }
+    }
+
+    return {
+      id: String(dto.id),
+      userId: dto.user?.id ? String(dto.user.id) : (dto.userId ? String(dto.userId) : ""),
+      user,
+      type: (dto.type as DailyReportType) || "daily",
+      departmentId: (dto.user?.department || "") as DepartmentId,
+      date: dto.reportDate || "",
+      status: (dto.reportStatus?.toUpperCase() || "DRAFT") as DailyReportStatus,
+      todayWorks,
+      tomorrowPlans,
+      blockers,
+      approverId: dto.approver?.id ? String(dto.approver.id) : undefined,
+      approver,
+      ccRecipientIds: (dto.ccRecipients || []).map((c) => String(c.id)),
+      ccRecipients,
+      attachments,
+    feedbacks,
+    submittedAt: dto.submittedAt || undefined,
+    createdAt: dto.createdAt || "",
+    updatedAt: dto.updatedAt || "",
+  };
+};
+

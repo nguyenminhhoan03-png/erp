@@ -76,7 +76,7 @@ export function GovCreateSolutionModal({
   defaultCategory = "GOV",
 }: GovCreateSolutionModalProps) {
   const { solutions, addDigitalSolution } = useGovStore();
-  const { users, departments } = useUserStore();
+  const { users, departments, fetchDepartments } = useUserStore();
 
   const [projectCategory, setProjectCategory] = useState<"GOV" | "OUTSOURCE" | "INTERNAL">(defaultCategory);
   const [name, setName] = useState("");
@@ -84,6 +84,12 @@ export function GovCreateSolutionModal({
   const [targetDepartment, setTargetDepartment] = useState("");
   const [partnerName, setPartnerName] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<string[]>([]);
+  const [deptSearch, setDeptSearch] = useState("");
+  const [isDeptDropdownOpen, setIsDeptDropdownOpen] = useState(false);
+  const deptDropdownRef = useRef<HTMLDivElement>(null);
+  const deptSearchInputRef = useRef<HTMLInputElement>(null);
+
   const [scopeOfWork, setScopeOfWork] = useState("");
   const [managerId, setManagerId] = useState<string>("");
   const [managerSearch, setManagerSearch] = useState("");
@@ -100,10 +106,65 @@ export function GovCreateSolutionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!departments.length) {
+      fetchDepartments();
+    }
+  }, [departments.length, fetchDepartments]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        deptDropdownRef.current &&
+        !deptDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDeptDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
     if (open) {
       setProjectCategory(defaultCategory);
+      setSelectedDepartmentIds([]);
+      setDepartmentId("");
     }
   }, [open, defaultCategory]);
+
+  useEffect(() => {
+    if (isDeptDropdownOpen && deptSearchInputRef.current) {
+      setTimeout(() => {
+        deptSearchInputRef.current?.focus();
+      }, 50);
+    }
+  }, [isDeptDropdownOpen]);
+
+  const selectedDepartments = useMemo(() => {
+    return departments.filter((d) => selectedDepartmentIds.includes(String(d.id)));
+  }, [departments, selectedDepartmentIds]);
+
+  const filteredDepartments = useMemo(() => {
+    let list = departments;
+    if (deptSearch.trim()) {
+      const q = removeVietnameseTones(deptSearch.trim());
+      list = list.filter((d) => {
+        const dName = removeVietnameseTones(d.name || "");
+        const dCode = removeVietnameseTones(d.code || "");
+        return dName.includes(q) || dCode.includes(q);
+      });
+    }
+    return list;
+  }, [departments, deptSearch]);
+
+  const toggleDepartment = (id: string | number) => {
+    const sId = String(id);
+    setSelectedDepartmentIds((prev) =>
+      prev.includes(sId) ? prev.filter((item) => item !== sId) : [...prev, sId]
+    );
+  };
 
   useEffect(() => {
     if (isManagerDropdownOpen) {
@@ -175,12 +236,15 @@ export function GovCreateSolutionModal({
     try {
       const randomColor = COLOR_PRESETS[Math.floor(Math.random() * COLOR_PRESETS.length)];
       const numBudget = budget ? Number(budget.replace(/\D/g, "")) : undefined;
+      const selectedDeptNames = selectedDepartments.map((d) => d.name);
 
       const extraDesc = [
         description.trim(),
         projectCategory === "OUTSOURCE" && partnerName ? `[Khách hàng: ${partnerName.trim()}]` : "",
         projectCategory === "OUTSOURCE" && scopeOfWork ? `[Phạm vi/Công nghệ: ${scopeOfWork.trim()}]` : "",
-        projectCategory === "INTERNAL" && departmentId ? `[Phòng ban: ${departments.find(d => String(d.id) === departmentId)?.name || departmentId}]` : "",
+        projectCategory === "INTERNAL" && selectedDeptNames.length > 0
+          ? `[Phòng ban phụ trách: ${selectedDeptNames.join(", ")}]`
+          : "",
       ].filter(Boolean).join("\n");
 
       await addDigitalSolution({
@@ -188,12 +252,22 @@ export function GovCreateSolutionModal({
         shortName: trimmedName,
         code: finalCode,
         category: projectCategory,
-        departmentId: departmentId ? Number(departmentId) : undefined,
+        departmentId:
+          projectCategory === "INTERNAL" && selectedDepartmentIds[0]
+            ? Number(selectedDepartmentIds[0])
+            : undefined,
+        departmentIds:
+          projectCategory === "INTERNAL" ? selectedDepartmentIds.map(Number) : undefined,
         partnerName: partnerName.trim() || undefined,
         iconName: projectCategory === "GOV" ? "Landmark" : projectCategory === "OUTSOURCE" ? "Building2" : "Cpu",
         colorHex: randomColor.hex,
         badgeClass: randomColor.class,
-        targetGovDepartment: projectCategory === "GOV" ? targetDepartment.trim() : (partnerName.trim() || "Nội bộ"),
+        targetGovDepartment:
+          projectCategory === "GOV"
+            ? targetDepartment.trim()
+            : projectCategory === "OUTSOURCE"
+            ? partnerName.trim() || "Đối tác"
+            : selectedDeptNames.join(", ") || "Nội bộ",
         managerId: managerId ? Number(managerId) : undefined,
         status,
         priority,
@@ -451,23 +525,152 @@ export function GovCreateSolutionModal({
 
           {projectCategory === "INTERNAL" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border border-blue-500/20 bg-blue-500/5">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                  <Cpu className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Phòng ban chủ trì</span>
-                </label>
-                <Select value={departmentId} onValueChange={setDepartmentId}>
-                  <SelectTrigger className="h-9 text-xs bg-background">
-                    <SelectValue placeholder="Chọn phòng ban (tùy chọn)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={String(d.id)} className="text-xs">
-                        {d.name} ({d.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-1.5 relative" ref={deptDropdownRef}>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Cpu className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Phòng ban phụ trách nội bộ</span>
+                  </label>
+                  {selectedDepartmentIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDepartmentIds([])}
+                      className="text-[11px] text-muted-foreground hover:text-rose-500 transition-colors"
+                    >
+                      Bỏ chọn tất cả
+                    </button>
+                  )}
+                </div>
+
+                <div
+                  onClick={() => setIsDeptDropdownOpen(!isDeptDropdownOpen)}
+                  className={cn(
+                    "min-h-[36px] px-3 py-1.5 rounded-md border border-input bg-background flex items-center justify-between gap-2 text-xs cursor-pointer hover:border-primary/50 transition-colors",
+                    isDeptDropdownOpen && "ring-1 ring-ring border-ring"
+                  )}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+                    {selectedDepartments.length === 0 ? (
+                      <span className="text-muted-foreground py-0.5">
+                        Chọn các phòng ban phụ trách...
+                      </span>
+                    ) : (
+                      selectedDepartments.map((dept) => (
+                        <span
+                          key={dept.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-medium text-[11px] border border-amber-500/20"
+                        >
+                          <span>{dept.name}</span>
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleDepartment(dept.id);
+                            }}
+                            className="hover:text-rose-600 rounded p-0.5 hover:bg-amber-500/20 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </span>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform",
+                      isDeptDropdownOpen && "rotate-180"
+                    )}
+                  />
+                </div>
+
+                {isDeptDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border/80 rounded-xl shadow-xl z-50 p-2 space-y-2 max-h-60 overflow-y-auto">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        ref={deptSearchInputRef}
+                        value={deptSearch}
+                        onChange={(e) => setDeptSearch(e.target.value)}
+                        placeholder="Tìm kiếm phòng ban..."
+                        className="h-8 text-xs pl-8 pr-2"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground border-b border-border/50 pb-1.5">
+                      <span>Đã chọn: {selectedDepartmentIds.length} phòng ban</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDepartmentIds(departments.map((d) => String(d.id)));
+                          }}
+                          className="text-primary hover:underline"
+                        >
+                          Chọn tất cả
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDepartmentIds([]);
+                          }}
+                          className="hover:text-foreground hover:underline"
+                        >
+                          Bỏ chọn
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      {filteredDepartments.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-muted-foreground">
+                          Không tìm thấy phòng ban nào
+                        </div>
+                      ) : (
+                        filteredDepartments.map((dept) => {
+                          const isSelected = selectedDepartmentIds.includes(String(dept.id));
+                          return (
+                            <div
+                              key={dept.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDepartment(dept.id);
+                              }}
+                              className={cn(
+                                "p-2 rounded-lg text-xs hover:bg-muted/60 cursor-pointer flex items-center justify-between transition-colors",
+                                isSelected &&
+                                  "bg-amber-500/10 text-amber-800 dark:text-amber-200 font-medium"
+                              )}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className={cn(
+                                    "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                                    isSelected
+                                      ? "bg-amber-600 border-amber-600 text-white"
+                                      : "border-border/80 bg-background"
+                                  )}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                </div>
+                                <span className="truncate">{dept.name}</span>
+                              </div>
+                              {dept.employeesCount !== undefined && (
+                                <span className="text-[10px] text-muted-foreground shrink-0">
+                                  {dept.employeesCount} nhân sự
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
