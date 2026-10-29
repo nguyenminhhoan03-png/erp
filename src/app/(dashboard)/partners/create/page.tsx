@@ -117,14 +117,8 @@ export default function CreatePartnerPage() {
         if (res.data?.projects && res.data.projects.length > 0) {
           const apiProjects = res.data.projects.map((p) => p.name);
           setProjectOptions(apiProjects);
-          if (apiProjects.length > 0) {
-            setSelectedProjects([apiProjects[0]]);
-          }
         } else if (res.data?.services && res.data.services.length > 0) {
           setProjectOptions(res.data.services);
-          if (res.data.services.length > 0) {
-            setSelectedProjects([res.data.services[0]]);
-          }
         }
       })
       .catch(() => {})
@@ -567,25 +561,6 @@ export default function CreatePartnerPage() {
               </div>
             </div>
           </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border/80">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push("/partners")}
-            className="text-xs"
-          >
-            Hủy bỏ
-          </Button>
-          <Button
-            type="submit"
-            disabled={isSubmitting}
-            className="text-xs gap-1.5"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {isSubmitting ? "Đang lưu..." : "Lưu thông tin"}
-          </Button>
         </div>
       </form>
     </div>

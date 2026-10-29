@@ -36,6 +36,8 @@ import {
   Search,
   RotateCcw,
   Trash2,
+  Upload,
+  Loader2,
 } from "lucide-react";
 
 export default function PartnersPage() {
@@ -43,6 +45,8 @@ export default function PartnersPage() {
   const [partners, setPartners] = React.useState<Partner[]>([]);
   const [options, setOptions] = React.useState<PartnerOptionsData>(MOCK_PARTNER_OPTIONS);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isImporting, setIsImporting] = React.useState(false);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const [search, setSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState<string>("all");
@@ -128,6 +132,32 @@ export default function PartnersPage() {
     router.push("/partners/create");
   };
 
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (!["csv", "txt", "sql", "json"].includes(ext)) {
+      toast.error("Định dạng file chưa hỗ trợ. Vui lòng chọn file .csv, .sql hoặc .json");
+      if (importInputRef.current) importInputRef.current.value = "";
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const res = await partnerService.importContacts(file);
+      toast.success(res.message || "Import dữ liệu khách hàng thành công!");
+      await loadData();
+    } catch (err: any) {
+      toast.error(err?.message || "Có lỗi xảy ra khi import file dữ liệu");
+    } finally {
+      setIsImporting(false);
+      if (importInputRef.current) {
+        importInputRef.current.value = "";
+      }
+    }
+  };
+
   const handleViewDetail = (partner: Partner) => {
     router.push(`/partners/${partner.id}`);
   };
@@ -181,13 +211,38 @@ export default function PartnersPage() {
           </h1>
         </div>
 
-        <Button
-          onClick={handleOpenCreate}
-          className="gap-1.5 font-medium text-xs h-9 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Thêm mới
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,.txt,.sql,.json"
+            onChange={handleImportFileChange}
+            className="hidden"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isImporting}
+            onClick={() => importInputRef.current?.click()}
+            className="gap-1.5 font-medium text-xs h-9 cursor-pointer bg-card hover:bg-muted"
+            title="Import khách hàng từ file .csv, .sql, .json"
+          >
+            {isImporting ? (
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+            ) : (
+              <Upload className="w-4 h-4 text-primary" />
+            )}
+            <span>{isImporting ? "Đang import..." : "Import dữ liệu"}</span>
+          </Button>
+
+          <Button
+            onClick={handleOpenCreate}
+            className="gap-1.5 font-medium text-xs h-9 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Thêm mới
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">

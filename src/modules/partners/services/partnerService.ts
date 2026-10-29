@@ -44,6 +44,25 @@ export const partnerService = {
     return apiRequest<PartnerOptionsResponse>("/erp/partners/options");
   },
 
+  async importContacts(
+    file: File,
+    params?: { source?: string; service?: string }
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: { total: number; created: number; updated: number };
+  }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (params?.source) formData.append("source", params.source);
+    if (params?.service) formData.append("service", params.service);
+
+    return apiRequest("/erp/partners/import", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
   async createPartner(data: {
     name: string;
     code?: string;

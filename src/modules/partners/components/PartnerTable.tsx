@@ -305,11 +305,7 @@ export function PartnerTable({
                         <DropdownMenuContent align="end" className="w-40 text-xs">
                           <DropdownMenuItem onClick={() => onViewDetail(partner)}>
                             <Eye className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                            Xem chi tiết
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onEditPartner(partner)}>
-                            <Edit className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                            Chỉnh sửa
+                            Xem & Chỉnh sửa
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
